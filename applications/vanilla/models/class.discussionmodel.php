@@ -738,7 +738,7 @@ class DiscussionModel extends VanillaModel {
             ->Where('UserID', $UserID)
             ->Put();
       } else {
-         $this->SQL->Options('Ignore');
+         $this->SQL->Options('Ignore', TRUE);
          $this->SQL->Insert(
             'UserDiscussion',
             array(
@@ -1281,7 +1281,7 @@ class DiscussionModel extends VanillaModel {
 		$Discussion = $DiscussionData->FirstRow();
 
       if ($Discussion->WatchUserID == '') {
-         $this->SQL->Options('Ignore');
+         $this->SQL->Options('Ignore', TRUE);
          $this->SQL
             ->Insert('UserDiscussion', array(
                'UserID' => $UserID,
