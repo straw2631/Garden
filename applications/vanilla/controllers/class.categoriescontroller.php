@@ -87,7 +87,6 @@ class CategoriesController extends VanillaController {
          $this->AddJsFile('discussions.js');
          $this->AddJsFile('bookmark.js');
          $this->AddJsFile('options.js');
-         $this->AddJsFile('jquery.gardenmorepager.js');
          $this->Head->AddRss($this->SelfUrl.'/feed.rss', $this->Head->Title());
       }
       
