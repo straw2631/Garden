@@ -41,7 +41,11 @@ class ProxyRequest {
       $this->Loud = $Loud;
       
       $CookieKey = md5(mt_rand(0, 72312189).microtime(true));
-      $this->CookieJar = CombinePaths(array(PATH_CACHE,"cookiejar.{$CookieKey}"));
+      if (defined('PATH_CACHE')) {
+         $this->CookieJar = CombinePaths(array(PATH_CACHE,"cookiejar.{$CookieKey}"));
+      } else {
+         $this->CookieJar = CombinePaths(array("/tmp","cookiejar.{$CookieKey}"));
+      }
       
       if (!is_array($RequestDefaults)) $RequestDefaults = array();
       $Defaults = array(
