@@ -47,70 +47,72 @@ jQuery(document).ready(function($) {
             parent.window.frames[0].location.replace(newLocation);
          }
       } else {
-         var messages = [];
-         messageUrl = function(message) {
-            var id = Math.floor(Math.random() * 100000);
-            if (remoteUrl.substr(remoteUrl.length - 1) != '/')
-               remoteUrl += '/';
-               
-            return remoteUrl + "poll.html#poll:" + id + ":" + message;
-         }
-        
-         remotePostMessage = function(message, target) {
-            if (message.indexOf(':') >= 0) {
-               // Check to replace a similar message.
-               var messageType = message.split(':')[0];
-               for (var i = 0; i < messages.length; i++) {
-                  var messageI = messages[i];
-                  if (messageI.length >= messageType.length && messageI.substr(0, messageType.length) == messageType) {
-                     messages[i] = message;
-                     return;
-                  }
-               }
-            }
-            messages.push(message);
-         }
-        
-         setLocation = function(newLocation) {
-            if (messages.length == 0)
-               parent.window.frames[0].location.replace(newLocation);
-            else {
-               setTimeout(function(){
-                  setLocation(newLocation);
-               },500);
-            }
-         }
-         
-         var nextMessageTime = new Date();
-         setMessage = function() {
-            if (messages.length == 0)
-               return;
-
-            var messageTime = new Date();
-            if (messageTime < nextMessageTime)
-               return;
-
-            messageTime.setSeconds(messageTime.getSeconds() + 2);
-            nextMessageTime = messageTime;
-
-            var message = messages.splice(0, 1)[0];
-            var url = messageUrl(message);
-
-            document.getElementById('messageFrame').src = url;
-         }
-           
-         $(function() {
-            var body = document.getElementsByTagName("body")[0],
-               messageIframe = document.createElement("iframe");
-       
-            messageIframe.id = "messageFrame";
-            messageIframe.name = "messageFrame";
-            messageIframe.src = messageUrl('');
-            messageIframe.style.display = "none";
-            body.appendChild(messageIframe);
-            setMessage();
-            setInterval(setMessage, 300);
-         });
+         // If the browser doesn't support postMessage (ie7), give the iframe
+         // an acceptable fixed height and scrollbars
+//         var messages = [];
+//         messageUrl = function(message) {
+//            var id = Math.floor(Math.random() * 100000);
+//            if (remoteUrl.substr(remoteUrl.length - 1) != '/')
+//               remoteUrl += '/';
+//               
+//            return remoteUrl + "poll.html#poll:" + id + ":" + message;
+//         }
+//        
+//         remotePostMessage = function(message, target) {
+//            if (message.indexOf(':') >= 0) {
+//               // Check to replace a similar message.
+//               var messageType = message.split(':')[0];
+//               for (var i = 0; i < messages.length; i++) {
+//                  var messageI = messages[i];
+//                  if (messageI.length >= messageType.length && messageI.substr(0, messageType.length) == messageType) {
+//                     messages[i] = message;
+//                     return;
+//                  }
+//               }
+//            }
+//            messages.push(message);
+//         }
+//        
+//         setLocation = function(newLocation) {
+//            if (messages.length == 0)
+//               parent.window.frames[0].location.replace(newLocation);
+//            else {
+//               setTimeout(function(){
+//                  setLocation(newLocation);
+//               },500);
+//            }
+//         }
+//         
+//         var nextMessageTime = new Date();
+//         setMessage = function() {
+//            if (messages.length == 0)
+//               return;
+//
+//            var messageTime = new Date();
+//            if (messageTime < nextMessageTime)
+//               return;
+//
+//            messageTime.setSeconds(messageTime.getSeconds() + 2);
+//            nextMessageTime = messageTime;
+//
+//            var message = messages.splice(0, 1)[0];
+//            var url = messageUrl(message);
+//
+//            document.getElementById('messageFrame').src = url;
+//         }
+//           
+//         $(function() {
+//            var body = document.getElementsByTagName("body")[0],
+//               messageIframe = document.createElement("iframe");
+//       
+//            messageIframe.id = "messageFrame";
+//            messageIframe.name = "messageFrame";
+//            messageIframe.src = messageUrl('');
+//            messageIframe.style.display = "none";
+//            body.appendChild(messageIframe);
+//            setMessage();
+//            setInterval(setMessage, 300);
+//         });
       }
    }
 

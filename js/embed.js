@@ -10,7 +10,9 @@ window.vanilla.embed = function(host) {
       embedUrl = window.location.href.split('#')[0],
       jsPath = '/js/embed.js',
       currentPath = window.location.hash.substr(1),
-      disablePath = (window != top);
+      disablePath = (window != top),
+      frameScrolling = 'no',
+      frameHeight = '300';
    
    var optStr = function(name, defaultValue, definedValue) {
       if (window['vanilla_'+name]) {
@@ -62,25 +64,30 @@ window.vanilla.embed = function(host) {
       else
          window.attachEvent("onmessage", onMessage);
    } else {
-      var messageId = null;
-      setInterval(function() {
-         try {
-            var vid = 'vanilla' + id;
-            var hash = window.frames[vid].frames['messageFrame'].location.hash;
-            hash = hash.substr(6);
-         } catch(e) {
-            return;
-         }
-
-         var message = hash.split(':');
-         var newMessageId = message[0];
-         if (newMessageId == messageId)
-            return;
-         
-         messageId = newMessageId;
-         message.splice(0, 1);
-         processMessage(message);
-      }, 200);
+      // If the browser doesn't support postMessage (ie7), give the iframe
+      // an acceptable fixed height and scrollbars
+      frameScrolling = 'auto',
+      frameHeight = '500';
+//      
+//      var messageId = null;
+//      setInterval(function() {
+//         try {
+//            var vid = 'vanilla' + id;
+//            var hash = window.frames[vid].frames['messageFrame'].location.hash;
+//            hash = hash.substr(6);
+//         } catch(e) {
+//            return;
+//         }
+//
+//         var message = hash.split(':');
+//         var newMessageId = message[0];
+//         if (newMessageId == messageId)
+//            return;
+//         
+//         messageId = newMessageId;
+//         message.splice(0, 1);
+//         processMessage(message);
+//      }, 200);
    }
 
    checkHash = function() {
@@ -224,14 +231,14 @@ window.vanilla.embed = function(host) {
    vanillaIframe.id = "vanilla"+id;
    vanillaIframe.name = "vanilla"+id;
    vanillaIframe.src = vanillaUrl(currentPath);
-   vanillaIframe.scrolling = "no";
    vanillaIframe.frameBorder = "0";
    vanillaIframe.allowTransparency = true;
    vanillaIframe.border = "0";
    vanillaIframe.width = "100%";
-   vanillaIframe.height = "300";
+   vanillaIframe.scrolling = frameScrolling;
+   vanillaIframe.height = frameHeight;
+   vanillaIframe.style.height = frameHeight+'px';
    vanillaIframe.style.width = "100%";
-   vanillaIframe.style.height = "300px";
    vanillaIframe.style.border = "0";
    vanillaIframe.style.display = "block";
    var container = document.getElementById('vanilla-comments');
