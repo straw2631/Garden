@@ -381,11 +381,13 @@ class DiscussionsController extends VanillaController {
          
       $vanilla_identifier = array_unique($vanilla_identifier);
 			
-		$CountData = Gdn::SQL()
-			->Select('ForeignID, CountComments')
-			->From('Discussion')
-			->WhereIn('ForeignID', $vanilla_identifier)
-			->Get();
+		$CountData = new Gdn_DataSet(array());
+      
+//      Gdn::SQL()
+//			->Select('ForeignID, CountComments')
+//			->From('Discussion')
+//			->WhereIn('ForeignID', $vanilla_identifier)
+//			->Get();
 		
 		$FinalData = array();
 		if ($CountData->NumRows() == 0) {
