@@ -1786,13 +1786,14 @@ class Gdn_Controller extends Gdn_Pluggable {
       
       $FileList = array();
       foreach ($ResourceList as $Index => $ResourceInfo) {
+         
          $ResourceFile = $ResourceInfo['FileName'];
          $SkipFileCheck = FALSE;
          
          // Resolve CDN resources
          if (array_key_exists($ResourceFile, $Cdns))
             $ResourceFile = $Cdns[$ResourceFile];
-
+         
          if (strpos($ResourceFile, '//') !== FALSE) {
             
             // This is a link to an external file.
@@ -1840,8 +1841,10 @@ class Gdn_Controller extends Gdn_Pluggable {
             }
 
             // Application or plugin
-            $PluginFolder = StringBeginsWith(trim($AppFolder, '/'), 'plugins/', TRUE, TRUE);
-            if (in_array('plugins', $CheckLocations) && $PluginFolder) {
+            $IsPluginFolder = StringBeginsWith(trim($AppFolder, '/'), 'plugins/', TRUE, FALSE);
+            if ($IsPluginFolder)
+               $PluginFolder = StringBeginsWith(trim($AppFolder, '/'), 'plugins/', TRUE, TRUE);
+            if (in_array('plugins', $CheckLocations) && $IsPluginFolder) {
                
                // Plugin
                $TestPaths[] = CombinePaths(array(PATH_PLUGINS, $PluginFolder, $Stub, $ResourceFile));
@@ -1849,11 +1852,15 @@ class Gdn_Controller extends Gdn_Pluggable {
                
             }
             
-            if (in_array('applications', $CheckLocations) && !$PluginFolder) {
+            if (in_array('applications', $CheckLocations) && !$IsPluginFolder) {
                
                // Application
                if ($AppFolder)
                   $TestPaths[] = CombinePaths(array(PATH_APPLICATIONS, $AppFolder, $Stub, $ResourceFile));
+               
+               // Dashboard app is added by default
+               if ($AppFolder != 'dashboard')
+                  $TestPaths[] = CombinePaths(array(PATH_APPLICATIONS, 'dashboard', $Stub, $ResourceFile));
                
             }
             
