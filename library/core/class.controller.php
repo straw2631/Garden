@@ -531,15 +531,27 @@ class Gdn_Controller extends Gdn_Pluggable {
     * @param string $ApplicationFolder Optional.
     * @return boolean
     */
-   public function AddStacheFile($Template = '', $ControllerName = FALSE, $ApplicationFolder = FALSE) {
-      $StacheInfo = array('Template' => $Template, 'Controller' => $ControllerName, 'Application' => $ApplicationFolder);
+   public function AddStacheFile($Template = '', $ControllerName = NULL, $ApplicationFolder = FALSE) {
+      if (is_null($ControllerName))
+         $ControllerName = StringEndsWith($this->ControllerName, 'controller', TRUE, TRUE);
+         
+      if ($ControllerName)
+         $Template = "{$ControllerName}/{$Template}";
+         
+      $Template .= '.stache';
+      $StacheInfo = array(
+         'FileName'  => $Template, 
+         'AppFolder' => $ApplicationFolder,
+         'Options'   => array(
+            'name'      => $Template
+         )
+      );
       
       if (StringBeginsWith($ApplicationFolder, 'plugins/')) {
          $Name = StringBeginsWith($ApplicationFolder, 'plugins/', TRUE, TRUE);
          $Info = Gdn::PluginManager()->GetPluginInfo($Name, Gdn_PluginManager::ACCESS_PLUGINNAME);
-         if ($Info) {
+         if ($Info)
             $StacheInfo['Version'] = GetValue('Version', $Info);
-         }
       } else {
          $StacheInfo['Version'] = APPLICATION_VERSION;
       }
@@ -1596,6 +1608,8 @@ class Gdn_Controller extends Gdn_Pluggable {
          // Only get css & ui components if this is NOT a syndication request
          if ($this->SyndicationMethod == SYNDICATION_NONE && is_object($this->Head)) {
             
+            $RenderStartTime = microtime(true);
+            
             /*
              * CSS Files
              * 
@@ -1633,7 +1647,7 @@ class Gdn_Controller extends Gdn_Pluggable {
             $this->FireEvent('AfterCssCdns');
             
             $CssFiles = $this->ResolveStaticResources($this->_CssFiles, 'design', array(
-               'CDNS'   => $CssCdns
+               'CDNS'         => $CssCdns
             ));
             
             foreach ($CssFiles as $CssSrc => $CssOptions)
@@ -1663,12 +1677,54 @@ class Gdn_Controller extends Gdn_Pluggable {
             $this->FireEvent('AfterJsCdns');
             
             $JsFiles = $this->ResolveStaticResources($this->_JsFiles, 'js', array(
-               'CDNS'   => $JsCdns
+               'CDNS'         => $JsCdns
             ));
             
             foreach ($JsFiles as $JsSrc => $JsOptions)
                $this->Head->AddScript($JsSrc, 'text/javascript', $JsOptions);
+
+            /**
+             * Mustache Files
+             * 
+             * Resolve and add Mustache template files to the output.
+             */
             
+            $StacheFiles = $this->ResolveStaticResources($this->_StacheFiles, 'views', array(
+               'StripRoot'    => FALSE
+            ));
+            
+            if (sizeof($StacheFiles)) {
+               // Consolidate templates into one file
+               ksort($StacheFiles);
+               $HashTag = AssetModel::HashTag($StacheFiles);
+               $StacheFile = CombinePaths(array(PATH_CACHE, "stache-{$HashTag}.js"));
+
+               if (!file_exists($StacheFile)) {
+                  $StacheArchiveContents = array();
+                  foreach ($StacheFiles as $StacheSrcFile => $StacheSrcOptions) {
+                     $TemplateName = GetValue('name', $StacheSrcOptions);
+                     $StacheArchiveContents[$TemplateName] = file_get_contents($StacheSrcFile);
+                  }
+                  $StacheArchiveContents = json_encode($StacheArchiveContents);
+
+                  $StacheTempFile = "{$StacheFile}.tmp";
+                  file_put_contents($StacheTempFile, "Stache.Register({$StacheArchiveContents});");
+                  rename($StacheTempFile, $StacheFile);
+               }
+
+               if (file_exists($StacheFile)) {
+                  $StacheSrc = str_replace(
+                     array(PATH_ROOT, DS),
+                     array('', '/'),
+                     $StacheFile
+                  );
+
+                  $StacheOptions = array(
+                     'path'      => $StacheFile
+                  );
+                  $this->Head->AddScript($StacheSrc, 'text/javascript', $StacheOptions);
+               }
+            }
          }
          // Add the favicon.
          $Favicon = C('Garden.FavIcon');
@@ -1775,11 +1831,17 @@ class Gdn_Controller extends Gdn_Pluggable {
       $DefaultOptions = array(
          'GlobalLibrary'   => TRUE,
          'StripRoot'       => TRUE,
-         'CDNS'            => array()
+         'CDNS'            => array(),
+         'AutoVersion'     => TRUE
       );
       if (!is_array($Options))
          $Options = array();
       $Options = array_merge($DefaultOptions, $Options);
+      
+      // Parse options
+      $CheckGlobalLibrary = GetValue('GlobalLibrary', $Options);
+      $StripRoot = GetValue('StripRoot', $Options);
+      $AutoDetectVersion = GetValue('AutoVersion', $Options);
       
       // See if we're allowing any CDN replacements
       $Cdns = GetValue('CDNS', $Options, array());
@@ -1869,7 +1931,7 @@ class Gdn_Controller extends Gdn_Pluggable {
                // Global folder. eg. root/js/
                $TestPaths[] = CombinePaths(array(PATH_ROOT, $Stub, $ResourceFile));
                
-               if (GetValue('GlobalLibrary', $Options)) {
+               if ($CheckGlobalLibrary) {
                   // Global library folder. eg. root/js/library/
                   $TestPaths[] = CombinePaths(array(PATH_ROOT, $Stub, 'library', $ResourceFile));
                }
@@ -1935,7 +1997,7 @@ class Gdn_Controller extends Gdn_Pluggable {
             
             // Strip PATH_ROOT from absolute path
             $ResourceResolved = $ResourcePath;
-            if (GetValue('StripRoot', $Options)) {
+            if ($StripRoot) {
                $ResourceResolved = str_replace(
                   array(PATH_ROOT, DS),
                   array('', '/'),
