@@ -538,9 +538,10 @@ class Gdn_Controller extends Gdn_Pluggable {
       if ($ControllerName)
          $Template = "{$ControllerName}/{$Template}";
          
-      $Template .= '.stache';
+      $Template = StringEndsWith($Template, '.s.html', TRUE, TRUE);
+      $FileName = "{$Template}.s.html";
       $StacheInfo = array(
-         'FileName'  => $Template, 
+         'FileName'  => $FileName, 
          'AppFolder' => $ApplicationFolder,
          'Options'   => array(
             'name'      => $Template
@@ -1682,7 +1683,7 @@ class Gdn_Controller extends Gdn_Pluggable {
             
             foreach ($JsFiles as $JsSrc => $JsOptions)
                $this->Head->AddScript($JsSrc, 'text/javascript', $JsOptions);
-
+            
             /**
              * Mustache Files
              * 
@@ -1694,6 +1695,7 @@ class Gdn_Controller extends Gdn_Pluggable {
             ));
             
             if (sizeof($StacheFiles)) {
+               
                // Consolidate templates into one file
                ksort($StacheFiles);
                $HashTag = AssetModel::HashTag($StacheFiles);
@@ -1703,7 +1705,11 @@ class Gdn_Controller extends Gdn_Pluggable {
                   $StacheArchiveContents = array();
                   foreach ($StacheFiles as $StacheSrcFile => $StacheSrcOptions) {
                      $TemplateName = GetValue('name', $StacheSrcOptions);
-                     $StacheArchiveContents[$TemplateName] = file_get_contents($StacheSrcFile);
+                     $StacheArchiveContents[] = array(
+                        'Name'      => $TemplateName,
+                        'File'      => $StacheSrcFile,
+                        'Mustache'  => file_get_contents($StacheSrcFile)
+                     );
                   }
                   $StacheArchiveContents = json_encode($StacheArchiveContents);
 
@@ -1720,7 +1726,8 @@ class Gdn_Controller extends Gdn_Pluggable {
                   );
 
                   $StacheOptions = array(
-                     'path'      => $StacheFile
+                     'path'      => $StacheFile,
+                     'hint'      => 'inline'
                   );
                   $this->Head->AddScript($StacheSrc, 'text/javascript', $StacheOptions);
                }
@@ -2055,21 +2062,51 @@ class Gdn_Controller extends Gdn_Pluggable {
     * @return mixed The $Value that was set.
     */
    public function SetData($Key, $Value = NULL, $AddProperty = FALSE) {
-      if (is_array($Key)) {
-         $this->Data = array_merge($this->Data, $Key);
+      
+      // Make sure the config settings are in the right format
+      if (!is_array($this->Data))
+         $this->Data = array();
 
-         if ($AddProperty === TRUE) {
-            foreach ($Key as $Name => $Value) {
-               $this->$Name = $Value;
+      if (!is_array($Key)) {
+         $Key = array(
+            $Key => $Value
+         );
+      }
+      
+      $Data = $Key;
+      foreach ($Data as $Key => $Value) {
+
+         $Keys = explode('.', $Key);
+         $KeyCount = count($Keys);
+         $Settings = &$this->Data;
+         
+         // Set prop on controller
+         if ($AddProperty && $KeyCount == 1)
+            $this->$Key = $Value;
+
+         for ($i = 0; $i < $KeyCount; ++$i) {
+            $Key = $Keys[$i];
+            
+            if (!is_array($Settings)) $Settings = array();
+            $KeyExists = array_key_exists($Key, $Settings);
+   
+            if ($i == $KeyCount - 1) {
+               
+               // If we are on the last iteration of the key, then set the value.
+               $Settings[$Key] = $Value;
+               
+            } else {
+               
+               // Build the array as we loop over the key. Doucement.
+               if ($KeyExists === FALSE)
+                  $Settings[$Key] = array();
+               
+               // Advance the pointer
+               $Settings = &$Settings[$Key];
             }
          }
-         return;
       }
-
-      $this->Data[$Key] = $Value;
-      if($AddProperty === TRUE) {
-         $this->$Key = $Value;
-      }
+      
       return $Value;
    }
    
