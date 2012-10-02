@@ -310,7 +310,7 @@ class Gdn_Controller extends Gdn_Pluggable {
     * 
     * @var array
     */
-   protected $_StacheFiles;
+   protected $_TemplateFiles;
 
    /**
     * If JSON is going to be delivered to the client (see the render method),
@@ -354,7 +354,7 @@ class Gdn_Controller extends Gdn_Pluggable {
       $this->View = '';
       $this->_CssFiles = array();
       $this->_JsFiles = array();
-      $this->_StacheFiles = array();
+      $this->_TemplateFiles = array();
       $this->_Definitions = array();
       $this->_DeliveryMethod = DELIVERY_METHOD_XHTML;
       $this->_DeliveryType = DELIVERY_TYPE_ALL;
@@ -531,7 +531,7 @@ class Gdn_Controller extends Gdn_Pluggable {
     * @param string $ApplicationFolder Optional.
     * @return boolean
     */
-   public function AddStacheFile($Template = '', $ControllerName = NULL, $ApplicationFolder = FALSE) {
+   public function AddTemplateFile($Template = '', $ControllerName = NULL, $ApplicationFolder = FALSE) {
       if (is_null($ControllerName))
          $ControllerName = StringEndsWith($this->ControllerName, 'controller', TRUE, TRUE);
          
@@ -540,7 +540,7 @@ class Gdn_Controller extends Gdn_Pluggable {
          
       $Template = StringEndsWith($Template, '.s.html', TRUE, TRUE);
       $FileName = "{$Template}.s.html";
-      $StacheInfo = array(
+      $TemplateInfo = array(
          'FileName'  => $FileName, 
          'AppFolder' => $ApplicationFolder,
          'Options'   => array(
@@ -552,12 +552,12 @@ class Gdn_Controller extends Gdn_Pluggable {
          $Name = StringBeginsWith($ApplicationFolder, 'plugins/', TRUE, TRUE);
          $Info = Gdn::PluginManager()->GetPluginInfo($Name, Gdn_PluginManager::ACCESS_PLUGINNAME);
          if ($Info)
-            $StacheInfo['Version'] = GetValue('Version', $Info);
+            $TemplateInfo['Version'] = GetValue('Version', $Info);
       } else {
-         $StacheInfo['Version'] = APPLICATION_VERSION;
+         $TemplateInfo['Version'] = APPLICATION_VERSION;
       }
       
-      $this->_StacheFiles[] = $StacheInfo;
+      $this->_TemplateFiles[] = $TemplateInfo;
    }
 
    public function CanonicalUrl($Value = NULL) {
@@ -607,8 +607,8 @@ class Gdn_Controller extends Gdn_Pluggable {
    /**
     * Clear all Mustache files from the collection.
     */
-   public function ClearStacheFiles() {
-      $this->_StacheFiles = array();
+   public function ClearTemplateFiles() {
+      $this->_TemplateFiles = array();
    }
    
    public function ContentType($ContentType) {
@@ -1199,14 +1199,14 @@ class Gdn_Controller extends Gdn_Pluggable {
    }
       
    /**
-    * Removes a Stache file from the collection.
+    * Removes a Template file from the collection.
     *
-    * @param string $FileName The Stache file to search for.
+    * @param string $FileName The Template file to search for.
     */
-   public function RemoveStacheFile($FileName) {
-      foreach ($this->_StacheFiles as $Key => $FileInfo) {
+   public function RemoveTemplateFile($FileName) {
+      foreach ($this->_TemplateFiles as $Key => $FileInfo) {
          if ($FileInfo['Template'] == $FileName) {
-            unset($this->_StacheFiles[$Key]);
+            unset($this->_TemplateFiles[$Key]);
             return;
          }
       }
@@ -1690,100 +1690,104 @@ class Gdn_Controller extends Gdn_Pluggable {
              * Resolve and add Mustache template files to the output.
              */
             
-            $StacheFiles = $this->ResolveStaticResources($this->_StacheFiles, 'views', array(
+            $TemplateFiles = $this->ResolveStaticResources($this->_TemplateFiles, 'views', array(
                'StripRoot'    => FALSE
             ));
             
-            if (sizeof($StacheFiles)) {
-               ksort($StacheFiles);
+            if (sizeof($TemplateFiles)) {
+               ksort($TemplateFiles);
                
-               $StacheDeliveryMode = C('Garden.Stache.DeliveryMethod', 'defer');
+               $TemplateDeliveryMode = C('Garden.Template.DeliveryMethod', 'defer');
+               $ScriptHint = FALSE;
                
-               switch ($StacheDeliveryMode) {
+               switch ($TemplateDeliveryMode) {
+                  
+                  // Consolidated asynchronous or Inline synchronous loading serves the template content directly
                   case 'consolidate':
                   case 'inline':
                      
-                     $HashTag = AssetModel::HashTag($StacheFiles);
-                     $StacheFile = CombinePaths(array(PATH_CACHE, "stache-{$HashTag}.js"));
-
-                     if (!file_exists($StacheFile)) {
-                        $StacheArchiveContents = array();
-                        foreach ($StacheFiles as $StacheSrcFile => $StacheSrcOptions) {
-                           $TemplateName = GetValue('name', $StacheSrcOptions);
-                           $StacheArchiveContents[] = array(
+                     $HashTag = AssetModel::HashTag($TemplateFiles);
+                     $TemplateFile = CombinePaths(array(PATH_CACHE, "stache-{$HashTag}.js"));
+                     if ($TemplateDeliveryMode == 'inline')
+                        $ScriptHint = 'inline';
+                     
+                     if (!file_exists($TemplateFile)) {
+                        $TemplateArchiveContents = array();
+                        foreach ($TemplateFiles as $TemplateSrcFile => $TemplateSrcOptions) {
+                           $TemplateName = GetValue('name', $TemplateSrcOptions);
+                           
+                           $TemplateRelativeSrc = str_replace(
+                              array(PATH_ROOT, DS),
+                              array('', '/'),
+                              $TemplateSrcFile
+                           );
+                           
+                           $TemplateArchiveContents[] = array(
                               'Name'      => $TemplateName,
-                              'File'      => $StacheSrcFile,
-                              'Mustache'  => file_get_contents($StacheSrcFile)
+                              'URL'       => Gdn::Request()->Url($TemplateRelativeSrc, TRUE),
+                              'Contents'  => file_get_contents($TemplateSrcFile),
+                              'Type'      => 'inline'
                            );
                         }
-                        $StacheArchiveContents = json_encode($StacheArchiveContents);
+                        $TemplateArchiveContents = json_encode($TemplateArchiveContents);
 
-                        $StacheTempFile = "{$StacheFile}.tmp";
-                        file_put_contents($StacheTempFile, "Stache.Register({$StacheArchiveContents});");
-                        rename($StacheTempFile, $StacheFile);
-                     }
-
-                     if (file_exists($StacheFile)) {
-                        $StacheSrc = str_replace(
-                           array(PATH_ROOT, DS),
-                           array('', '/'),
-                           $StacheFile
-                        );
-
-                        $StacheOptions = array(
-                           'path'      => $StacheFile,
-                           'hint'      => 'inline'
-                        );
-                        $this->Head->AddScript($StacheSrc, 'text/javascript', $StacheOptions);
+                        $TemplateTempFile = "{$TemplateFile}.tmp";
+                        file_put_contents($TemplateTempFile, "gdn.Template.Register({$TemplateArchiveContents});");
+                        rename($TemplateTempFile, $TemplateFile);
                      }
                      
                      break;
                   
+                  // Deferred loading, just registers the templates and allows lazyloading on the client
                   case 'defer':
                      
-                     $StacheDeferredContents = array();
-                     foreach ($StacheFiles as $StacheSrcFile => $StacheSrcOptions) {
-                     
+                     $HashTag = AssetModel::HashTag($TemplateFiles);
+                     $TemplateFile = CombinePaths(array(PATH_CACHE, "stache-defer-{$HashTag}.js"));
+                     $ScriptHint = 'inline';
+
+                     if (!file_exists($TemplateFile)) {
+                        $TemplateDeferredContents = array();
+                        
+                        $TemplateDeferredContents = array();
+                        foreach ($TemplateFiles as $TemplateSrcFile => $TemplateSrcOptions) {
+                           $TemplateName = GetValue('name', $TemplateSrcOptions);
+
+                           $TemplateRelativeSrc = str_replace(
+                              array(PATH_ROOT, DS),
+                              array('', '/'),
+                              $TemplateSrcFile
+                           );
+
+                           $TemplateDeferredContents[] = array(
+                              'Name'      => $TemplateName,
+                              'URL'       => Gdn::Request()->Url($TemplateRelativeSrc, '//'),
+                              'Type'      => 'defer'
+                           );
+                        }
+                        $TemplateDeferredContents = json_encode($TemplateDeferredContents);
+                        
+                        $TemplateTempFile = "{$TemplateFile}.tmp";
+                        file_put_contents($TemplateTempFile, "gdn.Template.Register({$TemplateDeferredContents});");
+                        rename($TemplateTempFile, $TemplateFile);
                      }
-                     
+                        
                      break;
                }
                
-               // Consolidate templates into one file
-               
-               $HashTag = AssetModel::HashTag($StacheFiles);
-               $StacheFile = CombinePaths(array(PATH_CACHE, "stache-{$HashTag}.js"));
-
-               if (!file_exists($StacheFile)) {
-                  $StacheArchiveContents = array();
-                  foreach ($StacheFiles as $StacheSrcFile => $StacheSrcOptions) {
-                     $TemplateName = GetValue('name', $StacheSrcOptions);
-                     $StacheArchiveContents[] = array(
-                        'Name'      => $TemplateName,
-                        'File'      => $StacheSrcFile,
-                        'Mustache'  => file_get_contents($StacheSrcFile)
-                     );
-                  }
-                  $StacheArchiveContents = json_encode($StacheArchiveContents);
-
-                  $StacheTempFile = "{$StacheFile}.tmp";
-                  file_put_contents($StacheTempFile, "Stache.Register({$StacheArchiveContents});");
-                  rename($StacheTempFile, $StacheFile);
-               }
-
-               if (file_exists($StacheFile)) {
-                  $StacheSrc = str_replace(
+               if ($TemplateFile && file_exists($TemplateFile)) {
+                  $TemplateSrc = str_replace(
                      array(PATH_ROOT, DS),
                      array('', '/'),
-                     $StacheFile
+                     $TemplateFile
                   );
 
-                  $StacheOptions = array(
-                     'path'      => $StacheFile,
-                     'hint'      => 'inline'
-                  );
-                  $this->Head->AddScript($StacheSrc, 'text/javascript', $StacheOptions);
+                  $TemplateOptions = array('path' => $TemplateFile);
+                  if ($ScriptHint == 'inline')
+                     $TemplateOptions['hint'] = 'inline';
+
+                  $this->Head->AddScript($TemplateSrc, 'text/javascript', $TemplateOptions);
                }
+               
             }
          }
          // Add the favicon.
@@ -1859,7 +1863,7 @@ class Gdn_Controller extends Gdn_Pluggable {
    /**
     * Resolve relative static resources into full paths
     * 
-    * This method is used to translate CSS, Js and Stache relative file lists 
+    * This method is used to translate CSS, Js and Template relative file lists 
     * into absolute paths.
     * 
     * Element values should conform to the following format:
@@ -2220,8 +2224,8 @@ class Gdn_Controller extends Gdn_Pluggable {
       $this->_Json[$Key] = $Value;
    }
    
-   public function StacheFiles() {
-      return $this->_StacheFiles;
+   public function TemplateFiles() {
+      return $this->_TemplateFiles;
    }
    
    public function StatusCode($StatusCode, $Message = NULL, $SetHeader = TRUE) {
