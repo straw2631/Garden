@@ -1695,9 +1695,62 @@ class Gdn_Controller extends Gdn_Pluggable {
             ));
             
             if (sizeof($StacheFiles)) {
+               ksort($StacheFiles);
+               
+               $StacheDeliveryMode = C('Garden.Stache.DeliveryMethod', 'defer');
+               
+               switch ($StacheDeliveryMode) {
+                  case 'consolidate':
+                  case 'inline':
+                     
+                     $HashTag = AssetModel::HashTag($StacheFiles);
+                     $StacheFile = CombinePaths(array(PATH_CACHE, "stache-{$HashTag}.js"));
+
+                     if (!file_exists($StacheFile)) {
+                        $StacheArchiveContents = array();
+                        foreach ($StacheFiles as $StacheSrcFile => $StacheSrcOptions) {
+                           $TemplateName = GetValue('name', $StacheSrcOptions);
+                           $StacheArchiveContents[] = array(
+                              'Name'      => $TemplateName,
+                              'File'      => $StacheSrcFile,
+                              'Mustache'  => file_get_contents($StacheSrcFile)
+                           );
+                        }
+                        $StacheArchiveContents = json_encode($StacheArchiveContents);
+
+                        $StacheTempFile = "{$StacheFile}.tmp";
+                        file_put_contents($StacheTempFile, "Stache.Register({$StacheArchiveContents});");
+                        rename($StacheTempFile, $StacheFile);
+                     }
+
+                     if (file_exists($StacheFile)) {
+                        $StacheSrc = str_replace(
+                           array(PATH_ROOT, DS),
+                           array('', '/'),
+                           $StacheFile
+                        );
+
+                        $StacheOptions = array(
+                           'path'      => $StacheFile,
+                           'hint'      => 'inline'
+                        );
+                        $this->Head->AddScript($StacheSrc, 'text/javascript', $StacheOptions);
+                     }
+                     
+                     break;
+                  
+                  case 'defer':
+                     
+                     $StacheDeferredContents = array();
+                     foreach ($StacheFiles as $StacheSrcFile => $StacheSrcOptions) {
+                     
+                     }
+                     
+                     break;
+               }
                
                // Consolidate templates into one file
-               ksort($StacheFiles);
+               
                $HashTag = AssetModel::HashTag($StacheFiles);
                $StacheFile = CombinePaths(array(PATH_CACHE, "stache-{$HashTag}.js"));
 
