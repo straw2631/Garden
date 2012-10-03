@@ -515,15 +515,17 @@
        * Renders the Template with View as the data, then returns the resulting
        * string.
        * 
-       * @param string Template Name of the template to render
+       * @param string TemplateName Name of the template to render
        * @param JSON View View object for Mustache
+       * @param array Partials A list of partial templates to include
        */
-      Render: function(Template, View) {
+      Render: function(TemplateName, View, Partials) {
          console.log('gdn.Template.Render');
          
-         var RealTemplate = gdn.Template.GetTemplateSrc(Template);
-         if (RealTemplate) {
-            return Mustache.render(RealTemplate, View);
+         var TemplateSrc = gdn.Template.GetTemplateSrc(TemplateName);
+         if (TemplateSrc) {
+            Partials = gdn.Template.GetPartials(Partials);
+            return Mustache.render(TemplateSrc, View, Partials);
          } else {
             return '';
          }
@@ -538,11 +540,12 @@
        * @param string Template Name of the template to render
        * @param JSON View View object for Mustache
        * @param DOMObject Element DOM object to replace
+       * @param array Partials A list of partial templates to include
        */
-      RenderInPlace: function(Template, View, Element) {
-         console.log('gdn.Template.RenderInPlace');
+      RenderInPlace: function(TemplateName, View, Element, Partials) {
+         console.log('gdn.Template.RenderInPlace('+TemplateName+')');
          
-         var Render = gdn.Template.Render(Template, View);
+         var Render = gdn.Template.Render(TemplateName, View, Partials);
          var Replace = jQuery(Render);
          jQuery(Element).replaceWith(Replace);
          return Replace;
@@ -579,6 +582,7 @@
          console.log('gdn.Template.GetTemplateSrc('+TemplateName+')');
          
          var Template = gdn.Template.GetTemplate(TemplateName);
+         if (!Template) return false;
          
          if (!Template.hasOwnProperty('Contents')) {
             console.log(' - auto downloading');
@@ -588,6 +592,19 @@
          
          return Template.Contents;
          
+      },
+      
+      GetPartials: function(Partials) {
+         var PartialList = {};
+         if (Partials instanceof Array) {
+            jQuery.each(Partials, function(i, PartialName){
+               var PartialTemplate = gdn.Template.GetTemplateSrc(PartialName);
+               if (!PartialTemplate) return;
+               
+               PartialList[PartialName] = PartialTemplate;
+            });
+         }
+         return PartialList;
       },
       
       Download: function(TemplateName, Mode) {
@@ -626,7 +643,7 @@
       },
       
       TemplateLoaded: function(Template) {
-         console.log("Template '"+Template.Name+"' has been downloaded:");
+         console.log(" - '"+Template.Name+"' downloaded");
          
          // Store template contents
          gdn.Template.SetTemplateField(Template.Name, 'Contents', Template.Contents);
