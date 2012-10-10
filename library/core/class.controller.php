@@ -538,8 +538,8 @@ class Gdn_Controller extends Gdn_Pluggable {
       if ($ControllerName)
          $Template = "{$ControllerName}/{$Template}";
          
-      $Template = StringEndsWith($Template, '.s.html', TRUE, TRUE);
-      $FileName = "{$Template}.s.html";
+      $Template = StringEndsWith($Template, '.mustache', TRUE, TRUE);
+      $FileName = "{$Template}.mustache";
       $TemplateInfo = array(
          'FileName'  => $FileName, 
          'AppFolder' => $ApplicationFolder,
@@ -1724,7 +1724,7 @@ class Gdn_Controller extends Gdn_Pluggable {
                            
                            $TemplateArchiveContents[] = array(
                               'Name'      => $TemplateName,
-                              'URL'       => Gdn::Request()->Url($TemplateRelativeSrc, TRUE),
+                              'URL'       => Gdn::Request()->Url($TemplateRelativeSrc, '//'),
                               'Contents'  => file_get_contents($TemplateSrcFile),
                               'Type'      => 'inline'
                            );

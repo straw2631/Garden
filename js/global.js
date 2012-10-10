@@ -477,9 +477,6 @@
        * Template::RegisterTemplate().
        */
       Register: function(Templates) {
-         console.log('gdn.Template.Register');
-         console.log(Templates);
-         
          jQuery.each(Templates, function(i, Template){
             gdn.Template.RegisterTemplate(Template)
          });
@@ -498,9 +495,6 @@
        * @param JSON Template Template object
        */
       RegisterTemplate: function(Template) {
-         console.log('gdn.Template.RegisterTemplate');
-         console.log(Template);
-         
          gdn.Template.Templates[Template.Name] = Template;
          gdn.Template.Templates[Template.Name].Downloading = false;
          
@@ -520,8 +514,6 @@
        * @param array Partials A list of partial templates to include
        */
       Render: function(TemplateName, View, Partials) {
-         console.log('gdn.Template.Render');
-         
          var TemplateSrc = gdn.Template.GetTemplateSrc(TemplateName);
          if (TemplateSrc) {
             Partials = gdn.Template.GetPartials(Partials);
@@ -543,8 +535,6 @@
        * @param array Partials A list of partial templates to include
        */
       RenderInPlace: function(TemplateName, View, Element, Partials) {
-         console.log('gdn.Template.RenderInPlace('+TemplateName+')');
-         
          var Render = gdn.Template.Render(TemplateName, View, Partials);
          var Replace = jQuery(Render);
          jQuery(Element).replaceWith(Replace);
@@ -579,13 +569,10 @@
        * @param string Template Name of the template to retrieve
        */
       GetTemplateSrc: function(TemplateName) {
-         console.log('gdn.Template.GetTemplateSrc('+TemplateName+')');
-         
          var Template = gdn.Template.GetTemplate(TemplateName);
          if (!Template) return false;
          
          if (!Template.hasOwnProperty('Contents')) {
-            console.log(' - auto downloading');
             gdn.Template.Download(TemplateName, 'sync');
             Template = gdn.Template.GetTemplate(TemplateName);
          }
@@ -608,8 +595,6 @@
       },
       
       Download: function(TemplateName, Mode) {
-         console.log('gdn.Template.Download('+TemplateName+')');
-         
          var Template = gdn.Template.GetTemplate(TemplateName);
          
          // We're downloading, don't queue another download
@@ -643,8 +628,6 @@
       },
       
       TemplateLoaded: function(Template) {
-         console.log(" - '"+Template.Name+"' downloaded");
-         
          // Store template contents
          gdn.Template.SetTemplateField(Template.Name, 'Contents', Template.Contents);
          gdn.Template.SetTemplateField(Template.Name, 'Downloading', false);
