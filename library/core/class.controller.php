@@ -306,7 +306,7 @@ class Gdn_Controller extends Gdn_Pluggable {
    protected $_JsFiles;
    
    /**
-    * An array of Mustache templates to add a JSONp style callback.
+    * An array of Mustache templates to send with the output
     * 
     * @var array
     */
