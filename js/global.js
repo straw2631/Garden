@@ -887,8 +887,14 @@ jQuery(document).ready(function($) {
    // view of the requested in-garden link will be displayed in a popup on the
    // current screen).
    if ($.fn.popup) {
-      $('a.Popup').popup();
-		$('a.PopConfirm').popup({'confirm' : true, 'followConfirm' : true});
+      
+      jQuery('a.Popup').livequery(function(){
+         $(this).popup();
+      });
+      
+		jQuery('a.PopConfirm').livequery(function(){
+         $(this).popup({'confirm' : true, 'followConfirm' : true});
+      });
    }
 
    $(document).delegate(".PopupWindow", 'click', function() {
