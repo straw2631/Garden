@@ -339,7 +339,7 @@ class Gdn_Form extends Gdn_Pluggable {
 
       $Input = $this->Input($FieldName, 'checkbox', $Attributes);
       if ($Label != '') $Input = '<label for="' . ArrayValueI('id', $Attributes,
-         $this->EscapeID($FieldName, FALSE)) . '" class="CheckBoxLabel">' . $Input . ' ' .
+         $this->EscapeID($FieldName, FALSE)) . '" class="CheckBoxLabel"'.Attribute('title', GetValue('title', $Attributes)).'>' . $Input . ' ' .
           T($Label) . '</label>';
           
       // Append validation error message
@@ -841,6 +841,70 @@ class Gdn_Form extends Gdn_Pluggable {
       // Append validation error message
       if ($ShowErrors && ArrayValueI('InlineErrors', $Attributes, TRUE))  
          $Return .= $this->InlineError($FieldName);
+      
+      return $Return;
+   }
+   
+   /**
+    * Returns the xhtml for a dropdown list with option groups.
+    * @param string $FieldName
+    * @param array $Data
+    * @param string $GroupField
+    * @param string $TextField
+    * @param string $ValueField
+    * @param array $Attributes
+    * @return string
+    */
+   public function DropDownGroup($FieldName, $Data, $GroupField, $TextField, $ValueField, $Attributes = array()) {
+      $Return = '<select'
+         . $this->_IDAttribute($FieldName, $Attributes)
+         . $this->_NameAttribute($FieldName, $Attributes)
+         . $this->_AttributesToString($Attributes)
+         . ">\n";
+     
+      // Get the current value.
+      $CurrentValue = GetValue('Value', $Attributes, FALSE);
+      if ($CurrentValue === FALSE) 
+         $CurrentValue = $this->GetValue($FieldName, GetValue('Default', $Attributes));
+      
+      // Add a null option?
+      $IncludeNull = ArrayValueI('IncludeNull', $Attributes, FALSE);
+      if ($IncludeNull === TRUE) 
+         $Return .= "<option value=\"\"></option>\n";
+      elseif ($IncludeNull)
+         $Return .= "<option value=\"\">$IncludeNull</option>\n";
+      
+      $LastGroup = NULL;
+      
+      foreach ($Data as $Row) {
+         $Group = $Row[$GroupField];
+         
+         // Check for a group header.
+         if ($LastGroup !== $Group) {
+            // Close off the last opt group.
+            if ($LastGroup !== NULL) {
+               $Return .= '</optgroup>';
+            }
+            
+            $Return .= '<optgroup label="'.htmlspecialchars($Group)."\">\n";
+            $LastGroup = $Group;
+         }
+         
+         $Value = $Row[$ValueField];
+         
+         if ($CurrentValue == $Value) {
+            $Selected = ' selected="selected"';
+         } else
+            $Selected = '';
+         
+         $Return .= '<option value="'.htmlspecialchars($Value).'"'.$Selected.'>'.htmlspecialchars($Row[$TextField])."</option>\n";
+         
+      }
+      
+      if ($LastGroup)
+         $Return .= '</optgroup>';
+      
+      $Return .= '</select>';
       
       return $Return;
    }

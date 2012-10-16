@@ -1116,6 +1116,10 @@ class ProfileController extends Gdn_Controller {
       }
    }
    
+   /**
+    * @param SideMenuModule $Module
+    * @param string $CurrentUrl
+    */
    public function BuildEditMenu(&$Module, $CurrentUrl = '') {
       if (!$this->User)
          return;
@@ -1124,7 +1128,7 @@ class ProfileController extends Gdn_Controller {
       $Module->AutoLinkGroups = FALSE;
       $Session = Gdn::Session();
       $ViewingUserID = $Session->UserID;
-      $Module->AddItem('Options', '');
+      $Module->AddItem('Options', '', FALSE, array('class' => 'SideMenu'));
          
       // Check that we have the necessary tools to allow image uploading
       $AllowImages = Gdn_UploadImage::CanUploadImages();

@@ -4,17 +4,10 @@ $NewOrDraft = !isset($this->Comment) || property_exists($this->Comment, 'DraftID
 $Editing = isset($this->Comment);
 
 $this->EventArguments['FormCssClass'] = 'MessageForm CommentForm FormTitleWrapper';
-
-// Create a menu to toggle through the available forms.
-$FormToggleMenu = new ToggleMenuModule();
-$FormToggleMenu->AddLabel(Sprite('SpText').' '.T('Text'), 'CommentForm');
-$FormToggleMenu->CurrentLabelCode('CommentForm');
-$this->EventArguments['FormToggleMenu'] = &$FormToggleMenu;
 $this->FireEvent('BeforeCommentForm');
-echo $FormToggleMenu->ToString();
-$this->FireEvent('AfterCommentFormMenu');
 ?>
-<div class="Toggle-CommentForm <?php echo $this->EventArguments['FormCssClass']; ?>">
+<div class="<?php echo $this->EventArguments['FormCssClass']; ?>">
+   <h2 class="H"><?php echo T($Editing ? 'Edit Comment' : 'Leave a Comment'); ?></h2>
    <div class="CommentFormWrap">
       <div class="Form-HeaderWrap">
          <div class="Form-Header">
@@ -42,7 +35,11 @@ $this->FireEvent('AfterCommentFormMenu');
                
                echo $this->Form->BodyBox('Body', array('Table' => 'Comment', 'tabindex' => 1));
                
+               echo '<div class="CommentOptions List Inline">';
                $this->FireEvent('AfterBodyField');
+               echo '</div>';
+               
+               
                echo "<div class=\"Buttons\">\n";
                $this->FireEvent('BeforeFormButtons');
                $CancelText = T('Home');
@@ -97,6 +94,7 @@ $this->FireEvent('AfterCommentFormMenu');
                $this->FireEvent('AfterFormButtons');
                echo "</div>\n";
                echo $this->Form->Close();
+//               echo '</div>';
                ?>
             </div>
          </div>
