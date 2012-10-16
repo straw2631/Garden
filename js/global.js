@@ -178,6 +178,10 @@
                break;
             case 'Html':
                $target.html(item.Data);
+               break;
+            case 'Callback':
+               jQuery.proxy(window[item.Data],$target)();
+               break;
          }
       }
    };
