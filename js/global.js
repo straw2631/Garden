@@ -179,8 +179,8 @@
             case 'Html':
                $target.html(item.Data);
                break;
-            case 'Callback':
-               jQuery.proxy(window[item.Data],$target)();
+            case 'Event':
+               gdn.event(item.Data).fire(item.Target);
                break;
          }
       }
@@ -214,6 +214,25 @@
       
       if (Response) gdn.loaded(null);
       return Response;
+   };
+   
+   gdn.events = {};
+   gdn.event = function( id ) {
+       var callbacks,
+           method,
+           topic = id && gdn.topics[ id ];
+       if ( !topic ) {
+           callbacks = jQuery.Callbacks();
+           topic = {
+               fire: callbacks.fire,
+               subscribe: callbacks.add,
+               unsubscribe: callbacks.remove
+           };
+           if ( id ) {
+               gdn.topics[ id ] = topic;
+           }
+       }
+       return topic;
    };
    
    gdn.loaded = function(Library) {
