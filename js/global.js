@@ -220,7 +220,7 @@
    gdn.event = function( id ) {
        var callbacks,
            method,
-           topic = id && gdn.topics[ id ];
+           topic = id && gdn.events[ id ];
        if ( !topic ) {
            callbacks = jQuery.Callbacks();
            topic = {
@@ -229,7 +229,7 @@
                unsubscribe: callbacks.remove
            };
            if ( id ) {
-               gdn.topics[ id ] = topic;
+               gdn.events[ id ] = topic;
            }
        }
        return topic;
