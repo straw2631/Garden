@@ -11,19 +11,22 @@ Contact Vanilla Forums Inc. at support [at] vanillaforums [dot] com
 // Define the plugin:
 $PluginInfo['Facebook'] = array(
 	'Name' => 'Facebook Sign In',
-   'Description' => 'Users may sign into your site using their Facebook account. <b>You must register your application with Facebook for this plugin to work.</b>',	
-   'Version' => '1.0.1',
+   'Description' => 'Users may sign into your site using their Facebook account.',	
+   'Version' => '1.0.2',
    'RequiredApplications' => array('Vanilla' => '2.0.14a'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
 	'MobileFriendly' => TRUE,
-   'SettingsUrl' => '/dashboard/settings/facebook',
+   'SettingsUrl' => '/dashboard/social/facebook',
    'SettingsPermission' => 'Garden.Settings.Manage',
    'HasLocale' => TRUE,
    'RegisterPermissions' => FALSE,
    'Author' => "Todd Burry",
    'AuthorEmail' => 'todd@vanillaforums.com',
-   'AuthorUrl' => 'http://www.vanillaforums.org/profile/todd'
+   'AuthorUrl' => 'http://www.vanillaforums.org/profile/todd',
+   'Hidden' => TRUE,
+   'SocialConnect' => TRUE,
+   'RequiresRegistration' => TRUE
 );
 
 class FacebookPlugin extends Gdn_Plugin {
@@ -222,7 +225,7 @@ class FacebookPlugin extends Gdn_Plugin {
          $CssClass = 'ReactButton PopupWindow';
       }
       
-      echo Anchor(Sprite('ReactFacebook', 'ReactSprite'), Url("post/facebook/{$Args['RecordType']}?id={$Args['RecordID']}", TRUE), $CssClass);
+      echo ' '.Anchor(Sprite('ReactFacebook', 'ReactSprite'), Url("post/facebook/{$Args['RecordType']}?id={$Args['RecordID']}", TRUE), $CssClass).' ';
    }
    
    public function Base_SignInIcons_Handler($Sender, $Args) {
@@ -253,16 +256,16 @@ class FacebookPlugin extends Gdn_Plugin {
    public function Base_GetConnections_Handler($Sender, $Args) {
       $Profile = GetValueR('User.Attributes.'.self::ProviderKey.'.Profile', $Args);
       
-      $Sender->Data['Connections'][self::ProviderKey] = array(
-            'Icon' => '/plugins/Facebook/design/f_logo-64.png',
-            'Name' => 'Facebook',
-            'ProviderKey' => self::ProviderKey,
-            'ConnectUrl' => $this->AuthorizeUri(FALSE, self::ProfileConnecUrl()),
-            'Profile' => array(
-               'Name' => GetValue('name', $Profile),
-               'Photo' => "http://graph.facebook.com/{$Profile['id']}/picture?type=large"
-               )
-          );
+      $Sender->Data["Connections"][self::ProviderKey] = array(
+         'Icon' => $this->GetWebResource('icon.png'),
+         'Name' => 'Facebook',
+         'ProviderKey' => self::ProviderKey,
+         'ConnectUrl' => $this->AuthorizeUri(FALSE, self::ProfileConnecUrl()),
+         'Profile' => array(
+            'Name' => GetValue('name', $Profile),
+            'Photo' => "http://graph.facebook.com/{$Profile['id']}/picture?type=large"
+            )
+      );
    }
    
    /**
@@ -355,7 +358,7 @@ class FacebookPlugin extends Gdn_Plugin {
       return "<a id=\"FacebookAuth\" href=\"$SigninHref\" class=\"PopupWindow\" title=\"$ImgAlt\" popupHref=\"$PopupSigninHref\" popupHeight=\"326\" popupWidth=\"627\" rel=\"nofollow\" ><img src=\"$ImgSrc\" alt=\"$ImgAlt\" align=\"bottom\" /></a>";
    }
 	
-   public function SettingsController_Facebook_Create($Sender, $Args) {
+   public function SocialController_Facebook_Create($Sender, $Args) {
       $Sender->Permission('Garden.Settings.Manage');
       if ($Sender->Form->IsPostBack()) {
          $Settings = array(
@@ -374,7 +377,7 @@ class FacebookPlugin extends Gdn_Plugin {
          $Sender->Form->SetFormValue('SendConnectEmail', C('Garden.Registration.SendConnectEmail', TRUE));
       }
 
-      $Sender->AddSideMenu();
+      $Sender->AddSideMenu('dashboard/social');
       $Sender->SetData('Title', T('Facebook Settings'));
       $Sender->Render('Settings', '', 'plugins/Facebook');
    }

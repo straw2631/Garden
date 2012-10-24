@@ -242,6 +242,7 @@ $PermissionModel->Define(array(
    'Garden.Activity.View' => 1,
    'Garden.Profiles.View' => 1,
    'Garden.Profiles.Edit' => 'Garden.SignIn.Allow',
+   'Garden.Curation.Manage' => 'Garden.Moderation.Manage',
    'Garden.Moderation.Manage',
    'Garden.AdvancedNotifications.Allow'
    ));
@@ -291,6 +292,7 @@ if (!$PermissionTableExists) {
       'Role' => 'Moderator',
       'Garden.SignIn.Allow' => 1,
       'Garden.Activity.View' => 1,
+      'Garden.Curation.Manage' => 1,
       'Garden.Moderation.Manage' => 1,
       'Garden.Profiles.View' => 1,
       'Garden.Profiles.Edit' => 1,
@@ -318,22 +320,24 @@ if (!$PermissionTableExists) {
       'Garden.Profiles.View' => 1,
       'Garden.Profiles.Edit' => 1,
       'Garden.AdvancedNotifications.Allow' => 1,
-      'Garden.Email.View' => 1
+      'Garden.Email.View' => 1,
+      'Garden.Curation.Manage' => 1,
+      'Garden.Moderation.Manage' => 1
       ));
 }
 $PermissionModel->ClearPermissions();
 
-// Photo Table
-$Construct->Table('Photo');
-
-$PhotoTableExists = $Construct->TableExists('Photo');
-
-$Construct
-	->PrimaryKey('PhotoID')
-   ->Column('Name', 'varchar(255)')
-   ->Column('InsertUserID', 'int', TRUE, 'key')
-   ->Column('DateInserted', 'datetime')
-   ->Set($Explicit, $Drop);
+//// Photo Table
+//$Construct->Table('Photo');
+//
+//$PhotoTableExists = $Construct->TableExists('Photo');
+//
+//$Construct
+//	->PrimaryKey('PhotoID')
+//   ->Column('Name', 'varchar(255)')
+//   ->Column('InsertUserID', 'int', TRUE, 'key')
+//   ->Column('DateInserted', 'datetime')
+//   ->Set($Explicit, $Drop);
 
 // Invitation Table
 $Construct->Table('Invitation')

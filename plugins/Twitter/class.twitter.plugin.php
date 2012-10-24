@@ -11,21 +11,23 @@ Contact Vanilla Forums Inc. at support [at] vanillaforums [dot] com
 // Define the plugin:
 $PluginInfo['Twitter'] = array(
 	'Name' => 'Twitter Sign In',
-   'Description' => 'Users may sign into your site using their Twitter account. <b>You must register your application with Twitter for this plugin to work.</b>',
-   'Version' => '1.0',
+   'Description' => 'Users may sign into your site using their Twitter account.',
+   'Version' => '1.0.2',
    'RequiredApplications' => array('Vanilla' => '2.0.12a'),
    'RequiredTheme' => FALSE,
    'RequiredPlugins' => FALSE,
 	'MobileFriendly' => TRUE,
-   'SettingsUrl' => '/dashboard/settings/twitter',
+   'SettingsUrl' => '/dashboard/social/twitter',
    'SettingsPermission' => 'Garden.Settings.Manage',
    'HasLocale' => TRUE,
    'RegisterPermissions' => FALSE,
    'Author' => "Todd Burry",
    'AuthorEmail' => 'todd@vanillaforums.com',
-   'AuthorUrl' => 'http://www.vanillaforums.org/profile/todd'
+   'AuthorUrl' => 'http://www.vanillaforums.org/profile/todd',
+   'Hidden' => TRUE,
+   'SocialConnect' => TRUE,
+   'RequiresRegistration' => TRUE
 );
-
 
 require_once PATH_LIBRARY.'/vendors/oauth/OAuth.php';
 
@@ -34,7 +36,7 @@ class TwitterPlugin extends Gdn_Plugin {
    public static $BaseApiUrl = 'http://api.twitter.com/1.1/';
 
    protected $_AccessToken = NULL;
-
+   
    /**
     * Gets/sets the current oauth access token.
     *
@@ -538,16 +540,16 @@ class TwitterPlugin extends Gdn_Plugin {
    public function Base_GetConnections_Handler($Sender, $Args) {
       $Profile = GetValueR('User.Attributes.'.self::ProviderKey.'.Profile', $Args);
       
-      $Sender->Data['Connections'][self::ProviderKey] = array(
-            'Icon' => '/plugins/Twitter/design/twitter_logo-64.png',
-            'Name' => 'Twitter',
-            'ProviderKey' => self::ProviderKey,
-            'ConnectUrl' => '/entry/twauthorize/profile',
-            'Profile' => array(
-                'Name' => '@'.GetValue('screen_name', $Profile),
-                'Photo' => GetValue('profile_image_url', $Profile)
-                )
-          );
+      $Sender->Data["Connections"][self::ProviderKey] = array(
+         'Icon' => $this->GetWebResource('icon.png'),
+         'Name' => 'Twitter',
+         'ProviderKey' => self::ProviderKey,
+         'ConnectUrl' => '/entry/twauthorize/profile',
+         'Profile' => array(
+             'Name' => '@'.GetValue('screen_name', $Profile),
+             'Photo' => GetValue('profile_image_url', $Profile)
+             )
+      );
    }
 
    public function API($Url, $Params = NULL, $Method = 'GET') {
@@ -721,7 +723,7 @@ class TwitterPlugin extends Gdn_Plugin {
       echo Anchor(Sprite('ReactTwitter', 'ReactSprite'), $Url, $CssClass);
    }
 
-   public function SettingsController_Twitter_Create($Sender, $Args) {
+   public function SocialController_Twitter_Create($Sender, $Args) {
    	  $Sender->Permission('Garden.Settings.Manage');
       if ($Sender->Form->IsPostBack()) {
          $Settings = array(
@@ -736,7 +738,7 @@ class TwitterPlugin extends Gdn_Plugin {
          $Sender->Form->SetValue('Secret', C('Plugins.Twitter.Secret'));
       }
 
-      $Sender->AddSideMenu();
+      $Sender->AddSideMenu('dashboard/social');
       $Sender->SetData('Title', T('Twitter Settings'));
       $Sender->Render('Settings', '', 'plugins/Twitter');
    }
