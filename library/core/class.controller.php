@@ -845,7 +845,7 @@ class Gdn_Controller extends Gdn_Pluggable {
     * Cleanup any remaining resources for this controller.
     */
    public function Finalize() {
-      $this->FireEvent('Finalize');
+      $this->FireAs('Gdn_Controller')->FireEvent('Finalize');
    }
 
    /**
@@ -999,6 +999,8 @@ class Gdn_Controller extends Gdn_Pluggable {
       
       $ResolvedPath = strtolower(CombinePaths(array(Gdn::Dispatcher()->Application(), Gdn::Dispatcher()->ControllerName, Gdn::Dispatcher()->ControllerMethod)));
       $this->ResolvedPath = $ResolvedPath;
+      
+      $this->FireEvent('Initialize');
    }
    
    public function JsFiles() {
@@ -1315,6 +1317,7 @@ class Gdn_Controller extends Gdn_Pluggable {
             
             $Data[$Key] = $Value;
          }
+         unset($this->Data);
       }
 
       // Massage the data for better rendering.
@@ -1342,6 +1345,7 @@ class Gdn_Controller extends Gdn_Pluggable {
       }
       
       // Make sure the database connection is closed before exiting.
+      $this->EventArguments['Data'] = &$Data;
       $this->Finalize();
       
       // Add error information from the form.
