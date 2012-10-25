@@ -35,6 +35,9 @@ class FacebookPlugin extends Gdn_Plugin {
    protected $_AccessToken = NULL;
    
    public function AccessToken() {
+      if (!$this->IsConfigured()) 
+         return FALSE;
+      
       if ($this->_AccessToken === NULL) {
          if (Gdn::Session()->IsValid())
             $this->_AccessToken = GetValueR(self::ProviderKey.'.AccessToken', Gdn::Session()->User->Attributes);
@@ -147,11 +150,17 @@ class FacebookPlugin extends Gdn_Plugin {
     * Add 'Facebook' option to the row.
     */
    public function Base_AfterReactions_Handler($Sender, $Args) {
+      if (!$this->SocialReactions()) 
+         return;
+      
       echo Gdn_Theme::BulletItem('Share');
       $this->AddReactButton($Sender, $Args);
    }
    
    public function Base_DiscussionFormOptions_Handler($Sender, $Args) {
+      if (!$this->SocialSharing()) 
+         return;
+      
       if (!$this->AccessToken())
          return;
       
@@ -163,6 +172,9 @@ class FacebookPlugin extends Gdn_Plugin {
    }
    
    public function DiscussionController_AfterBodyField_Handler($Sender, $Args) {
+      if (!$this->SocialSharing()) 
+         return;
+      
       if (!$this->AccessToken())
          return;
       
@@ -172,6 +184,9 @@ class FacebookPlugin extends Gdn_Plugin {
    }
    
    public function DiscussionModel_AfterSaveDiscussion_Handler($Sender, $Args) {
+      if (!$this->SocialSharing()) 
+         return;
+      
       if (!$this->AccessToken())
          return;
       
@@ -190,6 +205,9 @@ class FacebookPlugin extends Gdn_Plugin {
    }
    
    public function CommentModel_AfterSaveComment_Handler($Sender, $Args) {
+      if (!$this->SocialSharing()) 
+         return;
+      
       if (!$this->AccessToken())
          return;
       
@@ -276,6 +294,9 @@ class FacebookPlugin extends Gdn_Plugin {
     * @throws type
     */
    public function PostController_Facebook_Create($Sender, $RecordType, $ID) {
+      if (!$this->SocialReactions()) 
+         throw PermissionException();
+            
 //      if (!Gdn::Request()->IsPostBack())
 //         throw PermissionException('Javascript');
       
@@ -365,6 +386,8 @@ class FacebookPlugin extends Gdn_Plugin {
              'Plugins.Facebook.ApplicationID' => $Sender->Form->GetFormValue('ApplicationID'),
              'Plugins.Facebook.Secret' => $Sender->Form->GetFormValue('Secret'),
              'Plugins.Facebook.UseFacebookNames' => $Sender->Form->GetFormValue('UseFacebookNames'),
+             'Plugins.Facebook.SocialReactions' => $Sender->Form->GetFormValue('SocialReactions'),
+             'Plugins.Facebook.SocialSharing' => $Sender->Form->GetFormValue('SocialSharing'),
              'Garden.Registration.SendConnectEmail' => $Sender->Form->GetFormValue('SendConnectEmail'));
 
          SaveToConfig($Settings);
@@ -375,6 +398,8 @@ class FacebookPlugin extends Gdn_Plugin {
          $Sender->Form->SetFormValue('Secret', C('Plugins.Facebook.Secret'));
          $Sender->Form->SetFormValue('UseFacebookNames', C('Plugins.Facebook.UseFacebookNames'));
          $Sender->Form->SetFormValue('SendConnectEmail', C('Garden.Registration.SendConnectEmail', TRUE));
+         $Sender->Form->SetValue('SocialReactions', $this->SocialReactions());
+         $Sender->Form->SetValue('SocialSharing', $this->SocialSharing());
       }
 
       $Sender->AddSideMenu('dashboard/social');
@@ -567,6 +592,14 @@ class FacebookPlugin extends Gdn_Plugin {
       return TRUE;
    }
    
+   public function SocialSharing() {
+      return C('Plugins.Facebook.SocialSharing', TRUE);
+   }
+   
+   public function SocialReactions() {
+      return C('Plugins.Facebook.SocialReactions', TRUE);
+   }
+   
    public function Setup() {
       $Error = '';
       if (!function_exists('curl_init'))
@@ -660,33 +693,3 @@ class FacebookPlugin extends Gdn_Plugin {
 //         $this->_CreateProviderModel();
 //	}
 }
-
-if (!function_exists('GetRecord')):
-   
-function GetRecord($RecordType, $ID) {
-   switch(strtolower($RecordType)) {
-      case 'discussion':
-         $Model = new DiscussionModel();
-         $Row = $Model->GetID($ID);
-         $Row->Url = DiscussionUrl($Row);
-         $Row->ShareUrl = $Row->Url;
-         return (array)$Row;
-      case 'comment':
-         $Model = new CommentModel();
-         $Row = $Model->GetID($ID, DATASET_TYPE_ARRAY);
-         $Row['Url'] = Url("/discussion/comment/$ID#Comment_$ID", TRUE);
-         
-         $Model = new DiscussionModel();
-         $Discussion = $Model->GetID($Row['DiscussionID']);
-         $Discussion->Url = DiscussionUrl($Discussion);
-         $Row['ShareUrl'] = $Discussion->Url;
-         $Row['Name'] = $Discussion->Name;
-         $Row['Discussion'] = (array)$Discussion;
-         
-         return $Row;
-      default:
-         throw new Gdn_UserException(sprintf("I don't know what a %s is.", strtolower($RecordType)));
-   }
-}
-
-endif;
