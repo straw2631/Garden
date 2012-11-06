@@ -391,8 +391,8 @@ if (!function_exists('ChangeBasename')) {
 
 // Smarty
 if (!function_exists('CheckPermission')) {
-   function CheckPermission($PermissionName) {
-      $Result = Gdn::Session()->CheckPermission($PermissionName);
+   function CheckPermission($PermissionName, $Type = '') {
+      $Result = Gdn::Session()->CheckPermission($PermissionName, FALSE, $Type ? 'Category' : '', $Type);
       return $Result;
    }
 }
@@ -1625,6 +1625,23 @@ if (!function_exists('IsTimestamp')) {
    }
 }
 
+if (!function_exists('IsUrl')) {
+   /**
+    * Whether or not a string is a url in the form http://, https://, or //
+    * 
+    * @param string $Str The string to check.
+    * @return bool
+    * @since 2.1
+    */
+   function IsUrl($Str) {
+      if (substr($Str, 0, 2) == '//')
+         return TRUE;
+      if (strpos($Str, '://', 1) !== FALSE)
+         return TRUE;
+      return FALSE;
+   }
+}
+
 if (!function_exists('IsWritable')) {
    /**
     * PHP's native is_writable() function fails to correctly determine write
@@ -1789,6 +1806,31 @@ if (!function_exists('parse_ini_string')) {
          }
       }
       return $Result;
+   }
+}
+
+if (!function_exists('RecordType')) {
+   /**
+    * Return the record type and id of a row.
+    * 
+    * @param array|object $Row The record we are looking at.
+    * @return array An array with the following items
+    *  - 0: record type
+    *  - 1: record ID
+    * @since 2.1
+    */
+   function RecordType($Row) {
+      if ($RecordType = GetValue('RecordType', $Row)) {
+         return array($RecordType, GetValue('RecordID', $Row));
+      } elseif ($CommentID = GetValue('CommentID', $Row)) {
+         return array('Comment', $CommentID);
+      } elseif ($DiscussionID = GetValue('DiscussionID', $Row)) {
+         return array('Discussion', $DiscussionID);
+      } elseif ($ActivityID = GetValue('ActivityID', $Row)) {
+         return array('Activity', $ActivityID);
+      } else {
+         return array(null, null);
+      }
    }
 }
 

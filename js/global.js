@@ -299,6 +299,8 @@
 			timerId = setTimeout(function() {
 				jQuery('div.InformWrapper.AutoDismiss').fadeOut('fast', function() {
 					jQuery(this).remove();
+
+
 				});
 				jQuery('div.InformMessages').removeAttr('autodismisstimerid');
 			}, 7000);
