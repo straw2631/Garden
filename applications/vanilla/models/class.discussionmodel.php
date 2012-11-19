@@ -247,13 +247,13 @@ class DiscussionModel extends VanillaModel {
          if (!isset($Wheres['w.Bookmarked']) && !isset($Wheres['d.InsertUserID']))
             $this->RemoveAnnouncements($Data);
       }
-		
-		// Change discussions returned based on additional criteria	
-		$this->AddDiscussionColumns($Data);
       
       // Join in the users.
       Gdn::UserModel()->JoinUsers($Data, array('FirstUserID', 'LastUserID'));
       CategoryModel::JoinCategories($Data);
+      
+      // Change discussions returned based on additional criteria	
+		$this->AddDiscussionColumns($Data);
 		
       if (C('Vanilla.Views.Denormalize', FALSE))
          $this->AddDenormalizedViews($Data);
@@ -537,11 +537,19 @@ class DiscussionModel extends VanillaModel {
    
    public function Calculate(&$Discussion) {
       $ArchiveTimestamp = Gdn_Format::ToTimestamp(Gdn::Config('Vanilla.Archive.Date', 0));
-      $CategoryID = $Discussion->CategoryID;
-      $Category = CategoryModel::Categories($CategoryID);
-
+      
+      // Fix up output
       $Discussion->Name = Gdn_Format::Text($Discussion->Name);
+      $Discussion->Attributes = @unserialize($Discussion->Attributes);
       $Discussion->Url = DiscussionUrl($Discussion);
+      $Discussion->Tags = $this->FormatTags($Discussion->Tags);
+      
+      // Join in the category.
+      $Category = CategoryModel::Categories($Discussion->CategoryID);
+      if (!$Category) $Category = FALSE;
+      $Discussion->Category = $Category['Name'];
+      $Discussion->CategoryUrlCode = $Category['UrlCode'];
+      $Discussion->PermissionCategoryID = $Category['PermissionCategoryID'];
 
       // Add some legacy calculated columns.
       if (!property_exists($Discussion, 'FirstUserID')) {
@@ -552,33 +560,40 @@ class DiscussionModel extends VanillaModel {
       }
 
       // Add the columns from UserDiscussion if they don't exist.
-      if (!property_exists($Discussion, 'WatchUserID')) {
+      if (!property_exists($Discussion, 'CountCommentWatch')) {
          $Discussion->WatchUserID = NULL;
          $Discussion->DateLastViewed = NULL;
          $Discussion->Dismissed = 0;
          $Discussion->Bookmarked = 0;
-         $Discussion->CountCommentWatch = 0;
+         $Discussion->CountCommentWatch = NULL;
       }
-
-      if($Discussion->DateLastComment && Gdn_Format::ToTimestamp($Discussion->DateLastComment) <= $ArchiveTimestamp) {
+   
+      // Allow for discussions to be archived
+      if ($Discussion->DateLastComment && Gdn_Format::ToTimestamp($Discussion->DateLastComment) <= $ArchiveTimestamp) {
          $Discussion->Closed = '1';
          if ($Discussion->CountCommentWatch) {
             $Discussion->CountUnreadComments = $Discussion->CountComments - $Discussion->CountCommentWatch;
          } else {
             $Discussion->CountUnreadComments = 0;
          }
+      // Allow for discussions to just be new.
       } elseif ($Discussion->CountCommentWatch === NULL) {
-         // Allow for discussions to just be new.
          $Discussion->CountUnreadComments = TRUE;
+      
       } else {
          $Discussion->CountUnreadComments = $Discussion->CountComments - $Discussion->CountCommentWatch;
       }
 
-      $Discussion->Read = !(bool)$Discussion->CountUnreadComments;
-      if ($Category) {
-         $Discussion->Read = $Category['DateMarkedRead'] > $Discussion->DateLastComment;
-         if ($Discussion->Read)
-            $Discussion->CountUnreadComments = 0;
+      if (!property_exists($Discussion, 'Read')) {
+         $Discussion->Read = !(bool)$Discussion->CountUnreadComments;
+         if ($Category && !is_null($Category['DateMarkedRead'])) {
+            // If the category was marked explicitly read at some point, see if that applies here
+            if ($Category['DateMarkedRead'] > $Discussion->DateLastComment)
+               $Discussion->Read = TRUE;
+            
+            if ($Discussion->Read)
+               $Discussion->CountUnreadComments = 0;
+         }
       }
 
       // Logic for incomplete comment count.
@@ -594,13 +609,13 @@ class DiscussionModel extends VanillaModel {
       elseif ($Discussion->CountUnreadComments < 0)
          $Discussion->CountUnreadComments = 0;
 
-      $Discussion->CountCommentWatch = is_numeric($Discussion->CountCommentWatch) ? $Discussion->CountCommentWatch : 0;
+      $Discussion->CountCommentWatch = is_numeric($Discussion->CountCommentWatch) ? $Discussion->CountCommentWatch : NULL;
 
       if ($Discussion->LastUserID == NULL) {
          $Discussion->LastUserID = $Discussion->InsertUserID;
          $Discussion->LastDate = $Discussion->DateInserted;
       }
-
+      
       $this->EventArguments['Discussion'] = $Discussion;
       $this->FireEvent('SetCalculatedFields');
    }
@@ -1077,7 +1092,7 @@ class DiscussionModel extends VanillaModel {
 	 * @return object SQL result.
 	 */
    public function GetForeignID($ForeignID, $Type = '') {
-      $Hash = strlen($ForeignID) > 32 ? md5($ForeignID) : $ForeignID;
+      $Hash = ForeignIDHash($ForeignID);
       $Session = Gdn::Session();
       $this->FireEvent('BeforeGetForeignID');
       $this->SQL
@@ -1139,13 +1154,6 @@ class DiscussionModel extends VanillaModel {
       
       if (!$Discussion)
          return $Discussion;
-      
-      $this->Calculate($Discussion);
-//      
-//      $Discussion->Name = Gdn_Format::Text($Discussion->Name);
-//      $Discussion->Attributes = @unserialize($Discussion->Attributes);
-//      $Discussion->Url = DiscussionUrl($Discussion);
-//      $Discussion->Tags = $this->FormatTags($Discussion->Tags);
 //      
 //      // Join in the category.
 //      $Category = CategoryModel::Categories($Discussion->CategoryID);
@@ -1157,8 +1165,9 @@ class DiscussionModel extends VanillaModel {
       // Join in the users.
       $Discussion = array($Discussion);
       Gdn::UserModel()->JoinUsers($Discussion, array('LastUserID', 'InsertUserID'));
-      CategoryModel::JoinCategories($Discussion);
       $Discussion = $Discussion[0];
+      
+      $this->Calculate($Discussion);
       
       if (C('Vanilla.Views.Denormalize', FALSE))
          $this->AddDenormalizedViews($Discussion);
