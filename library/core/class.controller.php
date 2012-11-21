@@ -482,6 +482,12 @@ class Gdn_Controller extends Gdn_Pluggable {
       }
       
       $this->_JsFiles[] = $JsInfo;
+      
+      // Hedge our bets and try include non-js-prefixed version too
+      if (StringBeginsWith($FileName, 'js/')) {
+         $JsInfo = array('FileName' => substr($FileName,3), 'AppFolder' => $AppFolder, 'Options' => $Options);
+         $this->_JsFiles[] = $JsInfo;
+      }
    }
 
    /**
