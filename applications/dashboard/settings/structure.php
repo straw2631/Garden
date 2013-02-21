@@ -685,11 +685,13 @@ $Construct
    ->Table('IpLog')
    ->PrimaryKey('IpLogID')
    ->Column('UserID', 'int(11)', FALSE, 'index')
-   ->Column('Event', 'varchar(32)', FALSE, 'index')       // register, visit, ipchange
+   ->Column('Event', 'varchar(32)', FALSE, 'index')       // register, login, failed login, visit
    ->Column('IPAddress', 'varchar(60)', FALSE, 'index')   // dotted quad format, or ipv6
    ->Column('IPLong', 'int', FALSE)                       // ip2long format
    ->Column('DateInserted', 'datetime')
    ->Column('DateUpdated', 'datetime')
+   ->Column('Country', 'varchar(3)')
+   ->Column('Location', 'varchar(32)')
    ->Set(FALSE, FALSE);
 
 /**
