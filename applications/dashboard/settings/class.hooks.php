@@ -213,5 +213,23 @@ class DashboardHooks implements Gdn_IPlugin {
             Trace(Gdn::UserModel()->Validation->ResultsText(), TRACE_WARNING);
          }
       }
-   }   
+   }
+   
+   /**
+    * Trap successful registrations and log their IPs
+    * 
+    * @param EntryController $Sender
+    */
+   public function EntryController_RegisterSuccessful_Handler($Sender) {
+      IPLog::Log('register');
+   }
+   
+   /**
+    * Trap pending registrations and log their IPs
+    * 
+    * @param EntryController $Sender
+    */
+   public function EntryController_RegisterPending_Handler($Sender) {
+      IPLog::Log('registerpending');
+   }
 }

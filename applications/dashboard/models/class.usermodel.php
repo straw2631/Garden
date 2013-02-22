@@ -3040,7 +3040,7 @@ class UserModel extends Gdn_Model {
          $this->Validation->AddValidationResult('Name', 'There is no email address associated with that account.');
          return FALSE;
       }
-      return TRUE;
+      return $Users;
    }
 
    public function PasswordReset($UserID, $Password) {

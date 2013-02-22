@@ -783,6 +783,11 @@ class EntryController extends Gdn_Controller {
                      $this->Form->AddError('ErrorPermission');
                      Gdn::Session()->End();
                   } else {
+                     
+                     // IPLog successful logins
+                     $LoginEvent = Gdn::Session()->CheckPermission('Garden.Settings.Manage') ? 'adminlogin' : 'login';
+                     IPLog::Log($LoginEvent);
+                     
                      if ($HourOffset != Gdn::Session()->User->HourOffset) {
                         Gdn::UserModel()->SetProperty(Gdn::Session()->UserID, 'HourOffset', $HourOffset);
                      }
@@ -793,6 +798,7 @@ class EntryController extends Gdn_Controller {
                   }
                } else {
                   $this->Form->AddError('Invalid password.');
+                  IPLog::Log('loginfail');
                }
             }
          }
@@ -1377,10 +1383,12 @@ class EntryController extends Gdn_Controller {
       if ($this->Form->IsPostBack() === TRUE) {
          $this->Form->ValidateRule('Email', 'ValidateRequired');
 
+         $Users = NULL;
          if ($this->Form->ErrorCount() == 0) {
             try {
                $Email = $this->Form->GetFormValue('Email');
-               if (!$this->UserModel->PasswordRequest($Email)) {
+               $Users = $this->UserModel->PasswordRequest($Email);
+               if (!$Users) {
                   $this->Form->SetValidationResults($this->UserModel->ValidationResults());
                }
             } catch (Exception $ex) {
@@ -1389,6 +1397,11 @@ class EntryController extends Gdn_Controller {
             if ($this->Form->ErrorCount() == 0) {
                $this->Form->AddError('Success!');
                $this->View = 'passwordrequestsent';
+               
+               // IPLog forgotten password requests
+               $Users = (array)$Users;
+               foreach ($Users as $User)
+                  IPLog::Log('passwordrequest', NULL, GetValue('UserID', $User));
             }
          } else {
             if ($this->Form->ErrorCount() == 0)
@@ -1464,6 +1477,9 @@ class EntryController extends Gdn_Controller {
       if ($EmailConfirmed) {
          $UserID = GetValue('UserID', $User);
          Gdn::Session()->Start($UserID);
+         
+         // IPLog email confirmation
+         IPLog::Log('emailconfirm');
       }
 
       $this->SetData('EmailConfirmed', $EmailConfirmed);
