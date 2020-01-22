@@ -1,85 +1,139 @@
-<?php if (!defined('APPLICATION')) exit(); ?>
-<h1><?php
-   if (is_object($this->User))
-      echo T('Edit User');
-   else
-      echo T('Add User');
-?></h1>
-<?php
-echo $this->Form->Open(array('class' => 'User'));
-echo $this->Form->Errors();
-if ($this->Data('AllowEditing')) { ?>
-   <ul>
-      <li>
-         <?php
-            echo $this->Form->Label('Username', 'Name');
-            echo $this->Form->TextBox('Name');
-         ?>
-      </li>
-      <li>
-         <?php
-            echo $this->Form->Label('Email', 'Email');
-            if (UserModel::NoEmail()) {
-               echo '<div class="Gloss">',
-                  T('Email addresses are disabled.', 'Email addresses are disabled. You can only add an email address if you are an administrator.'),
-                  '</div>';
-            }
-            echo $this->Form->TextBox('Email');
-         ?>
-      </li>
-      <li>
-         <?php
-            echo $this->Form->CheckBox('ShowEmail', T('Email visible to other users'), array('value' => '1'));
-         ?>
-      </li>
-      <li>
-         <?php
-            echo $this->Form->CheckBox('Verified', T('This user is verified as a non-spammer'), array('value' => '1'));
-         ?>
-      </li>
-      <li>
-         <?php
-            echo $this->Form->CheckBox('Banned', T('Banned'), array('value' => '1'));
-         ?>
-      </li>
-   </ul>
-   <h3><?php echo T('Roles'); ?></h3>
-   <ul>
-      <li>
-         <strong><?php echo T('Check all roles that apply to this user:'); ?></strong>
-         <?php 
-            //echo $this->Form->CheckBoxList("RoleID", $this->RoleData, $this->UserRoleData, array('TextField' => 'Name', 'ValueField' => 'RoleID')); 
-         echo $this->Form->CheckBoxList("RoleID", array_flip($this->RoleData), array_flip($this->UserRoleData)); 
-         ?>
-      </li>
-   </ul>
-   <h3><?php echo T('Password Options'); ?></h3>
-   <ul>
-      <li class="PasswordOptions">
-         <?php
-            $ResetOptions = array(
-               0 => T('Keep current password.'),
-               'Auto' => T('Force user to reset their password and send email notification.'),
-               'Manual' => T('Manually set user password. No email notification.')
-            );
-            echo $this->Form->RadioList('ResetPassword', $ResetOptions);
-         ?>
-      </li>
-      <li id="NewPassword">
-         <?php
-            echo $this->Form->Label('New Password', 'NewPassword');
-            echo $this->Form->Input('NewPassword', 'password');
-         ?>
-         <div class="InputButtons">
-            <?php
-               echo Anchor(T('Generate Password'), '#', 'GeneratePassword Button SmallButton');
-               echo Anchor(T('Reveal Password'), '#', 'RevealPassword Button SmallButton');
-            ?>
-         </div>
-      </li>
-   </ul>
-<?php 
+<?php if (!defined('APPLICATION')) exit();
+$editing = $this->data('User', false);
+echo heading($editing ? t('Edit User') : t('Add User'));
 
-   $this->FireEvent('AfterFormInputs');
-   echo $this->Form->Close('Save');
-}
+/** @var Gdn_Form $form */
+$form = $this->Form;
+// autocomplete is set to "nothanks". This is, strangely, not a mistake. See:
+// https://developer.mozilla.org/en-US/docs/Web/Security/Securing_your_site/Turning_off_form_autocompletion
+echo $form->open(['class' => 'User', 'autocomplete' => 'nothanks']);
+echo $form->errors();
+?>
+<ul>
+    <li class="form-group">
+        <?php echo $form->labelWrap('Username', 'Name'); ?>
+        <?php echo $form->textBoxWrap('Name'); ?>
+    </li>
+    <li class="form-group">
+        <div class="label-wrap">
+            <?php echo $form->label('Email', 'Email');
+            if (UserModel::noEmail()) {
+                echo '<div class="info">',
+                t('Email addresses are disabled.', 'Email addresses are disabled. You can only add an email address if you are an administrator.'),
+                '</div>';
+            }
+            // Email confirmation
+            if ($editing && !$this->data('_EmailConfirmed')) {
+                echo '<div class="info text-warning">',
+                t('This user has not confirmed their email address.'),
+                '</div>';
+            }
+            ?>
+        </div>
+        <?php echo $form->textBoxWrap('Email'); ?>
+    </li>
+
+    <?php if ($this->data('_CanConfirmEmail')): ?>
+        <li class="User-ConfirmEmail form-group">
+            <div class="input-wrap no-label">
+                <?php echo $form->checkBox('ConfirmEmail', t("Email is confirmed"), ['value' => '1']); ?>
+            </div>
+        </li>
+    <?php endif ?>
+    <li class="form-group">
+        <div class="input-wrap no-label">
+            <?php echo $form->checkBox('ShowEmail', t('Email visible to other users'), ['value' => '1']); ?>
+        </div>
+    </li>
+    <li class="form-group">
+        <div class="input-wrap no-label">
+            <?php echo $form->checkBox('Verified', t('Verified Label', 'Verified. Bypasses spam and pre-moderation filters.'), ['value' => '1']); ?>
+        </div>
+    </li>
+    <?php
+    // No need to ban a new user.
+    if ($editing) : ?>
+        <li class="form-group">
+            <div class="input-wrap no-label">
+                <?php echo $form->checkBox('Banned', t('Banned'), ['value' => $this->data('BanFlag')]); ?>
+                <?php if ($this->data('BannedOtherReasons')): ?>
+                    <div class="text-danger info"><?php echo t(
+                            'This user is also banned for other reasons and may stay banned.',
+                            'This user is also banned for other reasons and may stay banned or become banned again.'
+                        )?></div>
+                <?php endif; ?>
+            </div>
+        </li>
+    <?php endif; ?>
+    <?php if (c('Garden.Profile.Locations', false)) : ?>
+        <li class="form-group User-Location">
+            <?php echo $form->labelWrap('Location', 'Location'); ?>
+            <?php echo $form->textBoxWrap('Location'); ?>
+        </li>
+    <?php endif; ?>
+    <?php if (c('Garden.Profile.Titles', false)) : ?>
+        <li class="form-group User-Title">
+            <?php echo $form->labelWrap('Title', 'Title'); ?>
+            <?php echo $form->textBoxWrap('Title'); ?>
+        </li>
+    <?php endif; ?>
+    <?php $this->fireEvent('CustomUserFields') ?>
+    <?php if (count($this->data('Roles'))) : ?>
+        <li class="form-group">
+            <div class="label-wrap">
+                <?php echo wrap(t('Check all roles that apply to this user:'), 'span', ['class' => 'label']); ?>
+            </div>
+            <div class="input-wrap">
+                <?php echo $form->checkBoxList("RoleID", array_flip($this->data('Roles')), array_flip($this->data('UserRoles'))); ?>
+            </div>
+        </li>
+    <?php endif;
+    // Edit a user's password.
+    if ($editing) : ?>
+        <li class="PasswordOptions form-group">
+            <div class="label-wrap">
+                <?php echo wrap(t('Password Options'), 'span', ['class' => 'label']); ?>
+            </div>
+            <div class="input-wrap">
+                <?php echo $form->radioList('ResetPassword', $this->ResetOptions); ?>
+            </div>
+        </li>
+        <?php if (array_key_exists('Manual', $this->ResetOptions)) : ?>
+            <li id="NewPassword">
+                <div class="form-group">
+                    <?php echo $form->labelWrap('New Password', 'NewPassword'); ?>
+                    <?php echo $form->inputWrap('NewPassword', 'password'); ?>
+                </div>
+                <div class="form-group">
+                    <div class="buttons input-wrap no-label">
+                        <?php
+                        echo anchor(t('Generate Password'), '#', 'GeneratePassword btn btn-secondary');
+                        echo anchor(t('Reveal Password'), '#', 'RevealPassword btn btn-secondary',
+                            ['data-hide-text' => t('Hide Password'), 'data-show-text' => t('Reveal Password')]);
+                        ?>
+                    </div>
+                </div>
+            </li>
+        <?php endif;
+    // Add a new user's password
+    else: ?>
+        <div class="form-group">
+            <?php echo $form->labelWrap('Password', 'Password'); ?>
+            <?php echo $form->inputWrap('Password', 'password'); ?>
+        </div>
+        <div class="form-group">
+            <div class="buttons input-wrap no-label">
+                <?php
+                echo anchor(t('Generate Password'), '#', 'GeneratePassword btn btn-secondary');
+                echo anchor(t('Reveal Password'), '#', 'RevealPassword btn btn-secondary',
+                    ['data-hide-text' => t('Hide Password'), 'data-show-text' => t('Reveal Password')]);
+                ?>
+            </div>
+        </div>
+    <?php endif; ?>
+</ul>
+<?php
+
+$this->fireEvent('AfterFormInputs');
+echo $form->close('Save');
+

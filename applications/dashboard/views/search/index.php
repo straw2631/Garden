@@ -1,23 +1,16 @@
 <?php if (!defined('APPLICATION')) exit(); ?>
-<div class="SearchForm">
+    <div class="SearchForm">
+        <?php
+        $Form = $this->Form;
+        echo $Form->open(['action' => url('/search'), 'method' => 'get']),
+        '<div class="SiteSearch InputAndButton">',
+        $Form->textBox('Search', ['aria-label' => t('Enter your search term.'), 'title' => t('Enter your search term.') ]),
+        $Form->button('Search', ['aria-label' => t('Search'), 'Name' => '']),
+        '</div>',
+        $Form->errors(),
+        $Form->close();
+        ?>
+    </div>
 <?php
-$Form = $this->Form;
-$Form->InputPrefix = '';
-echo  $Form->Open(array('action' => Url('/search'), 'method' => 'get')),
-   '<div class="SiteSearch">',
-   $Form->TextBox('Search'),
-   $Form->Button('Search', array('Name' => '')),
-   '</div>',
-   $Form->Errors(),
-   $Form->Close();
-?>
-</div>
-<?php
-if (!is_array($this->SearchResults) || count($this->SearchResults) == 0) {
-   echo '<p class="NoResults">', sprintf(T('No results for %s.', 'No results for <b>%s</b>.'), htmlspecialchars($this->SearchTerm)), '</p>';
-} else {
-   echo $this->Pager->ToString('less');
-   $ViewLocation = $this->FetchViewLocation('results');
-   include($ViewLocation);
-   $this->Pager->Render();
-}
+$ViewLocation = $this->fetchViewLocation('results');
+include($ViewLocation);

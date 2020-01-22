@@ -1,221 +1,565 @@
-<?php if (!defined('APPLICATION')) exit();
+<?php
 
+use Garden\Container\Container;
+use Garden\Container\Reference;
+use Vanilla\Addon;
+use Vanilla\Contracts\Web\UASnifferInterface;
+use Vanilla\EmbeddedContent\LegacyEmbedReplacer;
+use Vanilla\Formatting\Embeds\EmbedManager;
+use Vanilla\Formatting\Html\HtmlEnhancer;
+use Vanilla\Formatting\Html\HtmlSanitizer;
+use Vanilla\InjectableInterface;
+use Vanilla\Contracts;
+use Vanilla\Models\CurrentUserPreloadProvider;
+use Vanilla\Models\LocalePreloadProvider;
+use Vanilla\Site\SingleSiteSectionProvider;
+use Vanilla\Theme\ThemeFeatures;
+use Vanilla\Utility\ContainerUtils;
+use \Vanilla\Formatting\Formats;
+use Firebase\JWT\JWT;
+use Vanilla\Web\Page;
+use Vanilla\Web\TwigEnhancer;
+use Vanilla\Web\UASniffer;
+
+if (!defined('APPLICATION')) exit();
 /**
- * Bootstrap Before
- * 
- * This file gives developers the opportunity to hook into Garden before any 
- * real work has been done. Nothing has been included yet, aside from this file.
- * No Garden features are available yet.
- */
-if (file_exists(PATH_ROOT.'/conf/bootstrap.before.php'))
-   require_once(PATH_ROOT.'/conf/bootstrap.before.php');
-
-/**
- * Define Core Constants
- * 
- * Garden depends on the presence of a certain base set of defines that allow it
- * to be aware of its own place within the system. These are conditionally 
- * defined here, in case they've already been set by a zealous bootstrap.before.
- */
-
-// Path to the primary configuration file
-if (!defined('PATH_CONF')) define('PATH_CONF', PATH_ROOT.'/conf');
-
-// Include default constants if none were defined elsewhere
-if (!defined('VANILLA_CONSTANTS'))
-   include(PATH_CONF.'/constants.php');
-
-// Make sure a default time zone is set
-if (ini_get('date.timezone') == '')
-   date_default_timezone_set('UTC');
-
-// Include the core function definitions
-require_once(PATH_LIBRARY_CORE.'/functions.error.php');
-require_once(PATH_LIBRARY_CORE.'/functions.general.php');
-
-// Include and initialize the autoloader
-require_once(PATH_LIBRARY_CORE.'/class.autoloader.php');
-Gdn_Autoloader::Start();
-
-// Cache Layer
-Gdn::FactoryInstall(Gdn::AliasCache, 'Gdn_Cache', NULL, Gdn::FactoryRealSingleton, 'Initialize');
-
-// Install the configuration handler
-Gdn::FactoryInstall(Gdn::AliasConfig, 'Gdn_Configuration');
-
-// Load default baseline Garden configurations
-Gdn::Config()->Load(PATH_CONF.'/config-defaults.php');
-
-// Load installation-specific configuration so that we know what apps are enabled
-Gdn::Config()->Load(PATH_CONF.'/config.php', 'Configuration', TRUE);
-
-Gdn::Config()->Caching(TRUE);
-
-/**
- * Bootstrap Early
- * 
- * A lot of the framework is loaded now, most importantly the autoloader, 
- * default config and the general and error functions. More control is possible 
- * here, but some things have already been loaded and are immutable.
- */
-if (file_exists(PATH_CONF.'/bootstrap.early.php'))
-   require_once(PATH_CONF.'/bootstrap.early.php');
-
-Debug(C('Debug', FALSE));
-
-// Default request object
-Gdn::FactoryInstall(Gdn::AliasRequest, 'Gdn_Request', NULL, Gdn::FactoryRealSingleton, 'Create');
-Gdn::Request()->FromEnvironment();
-
-/**
- * Extension Managers
- * 
- * Now load the Application, Theme and Plugin managers into the Factory, and 
- * process the Application-specific configuration defaults.
+ * Bootstrap.
+ *
+ * @copyright 2009-2019 Vanilla Forums Inc.
+ * @license GPL-2.0-only
+ * @package Core
+ * @since 2.0
  */
 
-// ApplicationManager
-Gdn::FactoryInstall(Gdn::AliasApplicationManager, 'Gdn_ApplicationManager');
-Gdn_Autoloader::Attach(Gdn_Autoloader::CONTEXT_APPLICATION);
-
-// ThemeManager
-Gdn::FactoryInstall(Gdn::AliasThemeManager, 'Gdn_ThemeManager');
-
-// PluginManager
-Gdn::FactoryInstall(Gdn::AliasPluginManager, 'Gdn_PluginManager');
-
-// Load the configurations for enabled Applications
-foreach (Gdn::ApplicationManager()->EnabledApplicationFolders() as $ApplicationName => $ApplicationFolder)
-   Gdn::Config()->Load(PATH_APPLICATIONS."/{$ApplicationFolder}/settings/configuration.php");
-   
-/**
- * Installer Redirect
- * 
- * If Garden is not yet installed, force the request to /dashboard/setup and 
- * begin installation.
- */
-if (Gdn::Config('Garden.Installed', FALSE) === FALSE && strpos(Gdn_Url::Request(), 'setup') === FALSE) {
-   header('Location: '.Gdn::Request()->Url('dashboard/setup', TRUE));
-   exit();
+// Guard against broken cache files.
+if (!class_exists('Gdn')) {
+    // Throwing an exception here would result in a white screen for the user.
+    // This error usually indicates the .ini files in /cache are out of date and should be deleted.
+    exit("Class Gdn not found.");
 }
 
-// Re-apply loaded user settings
-Gdn::Config()->OverlayDynamic();
+// Set up the dependency injection container.
+$dic = new Container();
+Gdn::setContainer($dic);
 
-/**
- * Bootstrap Late
- * 
- * All configurations are loaded, as well as the Application, Plugin and Theme 
- * managers.
- */
-if (file_exists(PATH_CONF.'/bootstrap.late.php'))
-   require_once(PATH_CONF.'/bootstrap.late.php');
+$dic->setInstance(Garden\Container\Container::class, $dic)
+    ->rule(\Psr\Container\ContainerInterface::class)
+    ->setAliasOf(Garden\Container\Container::class)
 
-if (C('Debug'))
-   Debug(TRUE);
+    ->rule(\Interop\Container\ContainerInterface::class)
+    ->setClass(\Vanilla\InteropContainer::class)
+    ->setShared(true)
 
-/**
- * Factory Services
- * 
- * These are the helper classes that facilitate Garden's operation. They can be 
- * overwritten using FactoryOverwrite, but their defaults are installed here.
- */
+    ->rule(InjectableInterface::class)
+    ->addCall('setDependencies')
 
-// Default database.
-Gdn::FactoryInstall(Gdn::AliasDatabase, 'Gdn_Database', NULL, Gdn::FactorySingleton, array('Database'));
-// Database drivers.
-Gdn::FactoryInstall('MySQLDriver', 'Gdn_MySQLDriver', NULL, Gdn::FactoryInstance);
-Gdn::FactoryInstall('MySQLStructure', 'Gdn_MySQLStructure', NULL, Gdn::FactoryInstance);
-// Form class
-Gdn::FactoryInstall('Form', 'Gdn_Form', NULL, Gdn::FactoryInstance);
+    ->rule(DateTimeInterface::class)
+    ->setAliasOf(DateTimeImmutable::class)
+    ->setConstructorArgs([null, null])
 
-// Identity, Authenticator & Session.
-Gdn::FactoryInstall('Identity', 'Gdn_CookieIdentity');
-Gdn::FactoryInstall(Gdn::AliasSession, 'Gdn_Session');
-Gdn::FactoryInstall(Gdn::AliasAuthenticator, 'Gdn_Auth');
+    // Cache
+    ->rule('Gdn_Cache')
+    ->setShared(true)
+    ->setFactory(['Gdn_Cache', 'initialize'])
+    ->addAlias('Cache')
 
-// Dispatcher.
-Gdn::FactoryInstall(Gdn::AliasRouter, 'Gdn_Router');
-Gdn::FactoryInstall(Gdn::AliasDispatcher, 'Gdn_Dispatcher');
+    // Configuration
+    ->rule('Gdn_Configuration')
+    ->setShared(true)
+    ->addAlias('Config')
+    ->addAlias(Contracts\ConfigurationInterface::class)
 
-// Smarty Templating Engine
-Gdn::FactoryInstall('Smarty', 'Smarty', PATH_LIBRARY.'/vendors/Smarty-2.6.25/libs/Smarty.class.php');
-Gdn::FactoryInstall('ViewHandler.tpl', 'Gdn_Smarty');
+    ->rule(\Vanilla\ImageResizer::class)
+    ->addCall('setAlwaysRewriteGif', [false])
 
-// Slice handler
-Gdn::FactoryInstall(Gdn::AliasSlice, 'Gdn_Slice');
+    // Site sections
+    ->rule(\Vanilla\Site\SiteSectionModel::class)
+    ->addCall('addProvider', [new Reference(SingleSiteSectionProvider::class)])
+    ->setShared(true)
 
-// Remote Statistics
-Gdn::FactoryInstall('Statistics', 'Gdn_Statistics', NULL, Gdn::FactorySingleton);
-Gdn::Statistics();
+    // Translation model
+    ->rule(\Vanilla\Site\TranslationModel::class)
+    ->addCall('addProvider', [new Reference(\Vanilla\Site\TranslationProvider::class)])
+    ->setShared(true)
 
-// Regarding
-Gdn::FactoryInstall('Regarding', 'Gdn_Regarding', NULL, Gdn::FactorySingleton);
-Gdn::Regarding();
+    // Site applications
+    ->rule(\Vanilla\Contracts\Site\ApplicationProviderInterface::class)
+    ->setClass(\Vanilla\Site\ApplicationProvider::class)
+    ->addCall('add', [new Reference(
+        \Vanilla\Site\Application::class,
+        ['garden', ['api', 'entry', 'sso', 'utility']]
+    )])
+    ->setShared(true)
 
-// Other objects.
-Gdn::FactoryInstall('Dummy', 'Gdn_Dummy');
+    // AddonManager
+    ->rule(Vanilla\AddonManager::class)
+    ->setShared(true)
+    ->setConstructorArgs([
+        [
+            Addon::TYPE_ADDON => ['/addons/addons', '/applications', '/plugins'],
+            Addon::TYPE_THEME => ['/addons/themes', '/themes'],
+            Addon::TYPE_LOCALE => '/locales'
+        ],
+        PATH_CACHE
+    ])
+    ->addAlias('AddonManager')
+    ->addAlias(Contracts\AddonProviderInterface::class)
+    ->addCall('registerAutoloader')
 
-/**
- * Extension Startup
- * 
- * Allow installed Extensions (Applications, Themes, Plugins) to execute startup
- * and bootstrap procedures that they may have, here.
- */
+    // ApplicationManager
+    ->rule('Gdn_ApplicationManager')
+    ->setShared(true)
+    ->addAlias('ApplicationManager')
 
-// Applications startup
-foreach (Gdn::ApplicationManager()->EnabledApplicationFolders() as $ApplicationName => $ApplicationFolder) {
-   // Include the application's bootstrap.
-   $Gdn_Path = PATH_APPLICATIONS."/{$ApplicationFolder}/settings/bootstrap.php";
-   if (file_exists($Gdn_Path))
-      include_once($Gdn_Path);
-      
-   // Include the application's hooks.
-   $Hooks_Path = PATH_APPLICATIONS."/{$ApplicationFolder}/settings/class.hooks.php";
-   if (file_exists($Hooks_Path))
-      include_once($Hooks_Path);
-}
+    ->rule(Garden\Web\Cookie::class)
+    ->setShared(true)
+    ->addAlias('Cookie')
 
-unset($Gdn_Path);
-unset($Hooks_Path);
+    // PluginManager
+    ->rule('Gdn_PluginManager')
+    ->setShared(true)
+    ->addAlias('PluginManager')
 
-// Themes startup
-Gdn::ThemeManager()->Start();
-Gdn_Autoloader::Attach(Gdn_Autoloader::CONTEXT_THEME);
+    ->rule(SsoUtils::class)
+    ->setShared(true)
 
-// Plugins startup
-Gdn::PluginManager()->Start();
-Gdn_Autoloader::Attach(Gdn_Autoloader::CONTEXT_PLUGIN);
+    // ThemeManager
+    ->rule('Gdn_ThemeManager')
+    ->setShared(true)
+    ->addAlias('ThemeManager')
+
+    // File base theme api provider
+    ->rule(\Vanilla\Models\ThemeModel::class)
+        ->addCall("addThemeProvider", [new Reference(\Vanilla\Models\FsThemeProvider::class)])
+
+
+    // Logger
+    ->rule(\Vanilla\Logger::class)
+    ->setShared(true)
+    ->addAlias(\Psr\Log\LoggerInterface::class)
+
+    ->rule(\Psr\Log\LoggerAwareInterface::class)
+    ->addCall('setLogger')
+
+    // EventManager
+    ->rule(\Garden\EventManager::class)
+    ->addAlias(\Vanilla\Contracts\Addons\EventListenerConfigInterface::class)
+    ->addAlias(\Psr\EventDispatcher\EventDispatcherInterface::class)
+    ->addAlias(\Psr\EventDispatcher\ListenerProviderInterface::class)
+    ->setShared(true)
+
+    // Locale
+    ->rule('Gdn_Locale')
+    ->setShared(true)
+    ->setConstructorArgs([new Reference(['Gdn_Configuration', 'Garden.Locale'])])
+    ->addAlias('Locale')
+
+    ->rule(Contracts\LocaleInterface::class)
+    ->setAliasOf(Gdn_Locale::class)
+    ->setShared(true)
+
+    // Request
+    ->rule('Gdn_Request')
+    ->setShared(true)
+    ->addCall('fromEnvironment')
+    ->addAlias('Request')
+    ->addAlias(\Garden\Web\RequestInterface::class)
+
+    ->rule(UASnifferInterface::class)
+    ->setClass(UASniffer::class)
+
+    // Database.
+    ->rule('Gdn_Database')
+    ->setShared(true)
+    ->setConstructorArgs([new Reference(['Gdn_Configuration', 'Database'])])
+    ->addAlias('Database')
+
+    ->rule('Gdn_DatabaseStructure')
+    ->setClass('Gdn_MySQLStructure')
+    ->setShared(true)
+    ->addAlias(Gdn::AliasDatabaseStructure)
+    ->addAlias('MySQLStructure')
+
+    ->rule('Gdn_SQLDriver')
+    ->setClass('Gdn_MySQLDriver')
+    ->setShared(true)
+    ->addAlias('Gdn_MySQLDriver')
+    ->addAlias('MySQLDriver')
+    ->addAlias(Gdn::AliasSqlDriver)
+
+    ->rule('Identity')
+    ->setClass('Gdn_CookieIdentity')
+    ->setShared(true)
+
+    ->rule('Gdn_Session')
+    ->setShared(true)
+    ->addAlias('Session')
+
+    ->rule(Gdn::AliasAuthenticator)
+    ->setClass('Gdn_Auth')
+    ->setShared(true)
+
+    ->rule('Gdn_Router')
+    ->addAlias(Gdn::AliasRouter)
+    ->setShared(true)
+
+    ->rule('Gdn_Dispatcher')
+    ->setShared(true)
+    ->addAlias(Gdn::AliasDispatcher)
+
+    ->rule(\Vanilla\Web\Asset\DeploymentCacheBuster::class)
+    ->setShared(true)
+    ->setConstructorArgs([
+        'deploymentTime' => ContainerUtils::config('Garden.Deployed')
+    ])
+
+    ->rule(\Vanilla\Web\Asset\AssetPreloadModel::class)
+    ->setShared(true)
+
+    ->rule(\Vanilla\Web\Asset\WebpackAssetProvider::class)
+    ->addCall('setHotReloadEnabled', [
+        ContainerUtils::config('HotReload.Enabled'),
+        ContainerUtils::config('HotReload.IP'),
+    ])
+    ->addCall('setLocaleKey', [ContainerUtils::currentLocale()])
+    ->addCall('setCacheBusterKey', [ContainerUtils::cacheBuster()])
+
+    ->rule(\Vanilla\Web\HttpStrictTransportSecurityModel::class)
+    ->addAlias('HstsModel')
+
+    ->rule(\Vanilla\Web\ContentSecurityPolicy\ContentSecurityPolicyModel::class)
+    ->setShared(true)
+    ->addCall('addProvider', [new Reference(\Vanilla\Web\ContentSecurityPolicy\DefaultContentSecurityPolicyProvider::class)])
+    ->addCall('addProvider', [new Reference(\Vanilla\Web\ContentSecurityPolicy\EmbedWhitelistContentSecurityPolicyProvider::class)])
+    ->addCall('addProvider', [new Reference(\Vanilla\Web\Asset\WebpackContentSecurityPolicyProvider::class)])
+
+    ->rule(\Vanilla\Web\Asset\LegacyAssetModel::class)
+    ->setConstructorArgs([ContainerUtils::cacheBuster()])
+
+    ->rule(\Garden\Web\Dispatcher::class)
+    ->setShared(true)
+    ->addCall('addRoute', ['route' => new Reference('@api-v2-route'), 'api-v2'])
+    ->addCall('addRoute', ['route' => new \Garden\Container\Callback(function () {
+        return new \Garden\Web\PreflightRoute('/api/v2', true);
+    })])
+    ->addCall('setAllowedOrigins', ['isTrustedDomain'])
+    ->addCall('addMiddleware', [new Reference('@smart-id-middleware')])
+    ->addCall('addMiddleware', [new Reference(\Vanilla\Web\CacheControlMiddleware::class)])
+    ->addCall('addMiddleware', [new Reference(\Vanilla\Web\DeploymentHeaderMiddleware::class)])
+    ->addCall('addMiddleware', [new Reference(\Vanilla\Web\ContentSecurityPolicyMiddleware::class)])
+    ->addCall('addMiddleware', [new Reference(\Vanilla\Web\HttpStrictTransportSecurityMiddleware::class)])
+
+    ->rule('@smart-id-middleware')
+    ->setClass(\Vanilla\Web\SmartIDMiddleware::class)
+    ->setConstructorArgs(['/api/v2/'])
+    ->addCall('addSmartID', ['CategoryID', 'categories', ['name', 'urlcode'], 'Category'])
+    ->addCall('addSmartID', ['RoleID', 'roles', ['name'], 'Role'])
+    ->addCall('addSmartID', ['UserID', 'users', '*', new Reference('@user-smart-id-resolver')])
+
+    ->rule('@user-smart-id-resolver')
+    ->setFactory(function (Container $dic) {
+        /* @var \Vanilla\Web\UserSmartIDResolver $uid */
+        $uid = $dic->get(\Vanilla\Web\UserSmartIDResolver::class);
+        $uid->setEmailEnabled(!$dic->get(Gdn_Configuration::class)->get('Garden.Registration.NoEmail'))
+            ->setViewEmail($dic->get(\Gdn_Session::class)->checkPermission('Garden.PersonalInfo.View'));
+
+        return $uid;
+    })
+
+    ->rule(\Vanilla\Web\PrivateCommunityMiddleware::class)
+    ->setConstructorArgs([ContainerUtils::config('Garden.PrivateCommunity')])
+
+    ->rule('@api-v2-route')
+    ->setClass(\Garden\Web\ResourceRoute::class)
+    ->setConstructorArgs(['/api/v2/', '*\\%sApiController'])
+    ->addCall('setMeta', ['CONTENT_TYPE', 'application/json; charset=utf-8'])
+    ->addCall('addMiddleware', [new Reference(\Vanilla\Web\PrivateCommunityMiddleware::class)])
+    ->addCall('addMiddleware', [new Reference(\Vanilla\Web\ApiFilterMiddleware::class)])
+
+    ->rule('@view-application/json')
+    ->setClass(\Vanilla\Web\JsonView::class)
+    ->setShared(true)
+
+    ->rule(\Garden\ClassLocator::class)
+    ->setClass(\Vanilla\VanillaClassLocator::class)
+
+    ->rule('Gdn_Model')
+    ->setShared(true)
+
+    ->rule(Contracts\Models\UserProviderInterface::class)
+    ->setClass(UserModel::class)
+
+    ->rule(Gdn_Validation::class)
+    ->addCall('addRule', ['BodyFormat', new Reference(\Vanilla\BodyFormatValidator::class)])
+
+    ->rule(\Vanilla\Models\AuthenticatorModel::class)
+    ->setShared(true)
+    ->addCall('registerAuthenticatorClass', [\Vanilla\Authenticator\PasswordAuthenticator::class])
+
+    ->rule(SearchModel::class)
+    ->setShared(true)
+
+    ->rule('Gdn_IPlugin')
+    ->setShared(true)
+
+    ->rule(Gdn_Plugin::class)
+    ->setShared(true)
+    ->addCall('setAddonFromManager')
+
+    ->rule('Gdn_Slice')
+    ->setShared(true)
+    ->addAlias('Slice')
+
+    ->rule('Gdn_Statistics')
+    ->addAlias('Statistics')
+    ->setShared(true)
+
+    ->rule('Gdn_Regarding')
+    ->setShared(true)
+
+    ->rule('BBCodeFormatter')
+    ->setClass('BBCode')
+    ->setShared(true)
+
+    ->rule('HtmlFormatter')
+    ->setClass(VanillaHtmlFormatter::class)
+    ->setShared(true)
+
+    ->rule(\Vanilla\Formatting\Quill\Renderer::class)
+    ->setShared(true)
+
+    ->rule(\Vanilla\Formatting\Quill\Parser::class)
+    ->addCall('addCoreBlotsAndFormats')
+    ->setShared(true)
+
+    ->rule('Smarty')
+    ->setShared(true)
+
+    ->rule('WebLinking')
+    ->setClass(\Vanilla\Web\WebLinking::class)
+    ->setShared(true)
+
+    ->rule('ViewHandler.tpl')
+    ->setClass('Gdn_Smarty')
+    ->setShared(true)
+
+    ->rule('ViewHandler.twig')
+    ->setClass(\Vanilla\Web\LegacyTwigViewHandler::class)
+    ->setShared(true)
+
+    ->rule(TwigEnhancer::class)
+    ->addCall('setCompileCacheDirectory', [PATH_CACHE . '/twig'])
+    ->setShared(true)
+
+    ->rule('Gdn_Form')
+    ->addAlias('Form')
+
+    ->rule(\Emoji::class)
+    ->setShared(true)
+
+    ->rule(\Vanilla\EmbeddedContent\EmbedService::class)
+    ->addCall('addCoreEmbeds')
+    ->setShared(true)
+
+    ->rule(Vanilla\PageScraper::class)
+    ->addCall('registerMetadataParser', [new Reference(Vanilla\Metadata\Parser\OpenGraphParser::class)])
+    ->addCall('registerMetadataParser', [new Reference(Vanilla\Metadata\Parser\JsonLDParser::class)])
+    ->setShared(true)
+
+    ->rule(Garden\Http\HttpClient::class)
+    ->setConstructorArgs(["handler" => new Reference(Vanilla\Web\SafeCurlHttpHandler::class)])
+
+    ->rule(Vanilla\Formatting\FormatService::class)
+    ->addCall('registerBuiltInFormats')
+    ->setShared(true)
+
+    ->rule(LegacyEmbedReplacer::class)
+    ->setShared(true)
+
+    ->rule(HtmlEnhancer::class)
+    ->setShared(true)
+
+    ->rule(HtmlSanitizer::class)
+    ->setShared(true)
+
+    ->rule(\Vanilla\Analytics\Client::class)
+    ->setShared(true)
+    ->addAlias(\Vanilla\Contracts\Analytics\ClientInterface::class)
+
+    ->rule(Vanilla\Scheduler\SchedulerInterface::class)
+    ->setClass(Vanilla\Scheduler\DummyScheduler::class)
+    ->addCall('addDriver', [Vanilla\Scheduler\Driver\LocalDriver::class])
+    ->addCall('setDispatchEventName', ['SchedulerDispatch'])
+    ->addCall('setDispatchedEventName', ['SchedulerDispatched'])
+    ->setShared(true)
+
+    // Controller data preloading
+    ->rule(Page::class)
+    ->setInherit(true)
+    ->addCall('registerReduxActionProvider', ['provider' => new Reference(LocalePreloadProvider::class)])
+    ->rule(Gdn_Controller::class)
+    ->setInherit(true)
+    ->addCall('registerReduxActionProvider', ['provider' => new Reference(LocalePreloadProvider::class)])
+    ->addCall('registerReduxActionProvider', ['provider' => new Reference(CurrentUserPreloadProvider::class)])
+;
+
+// Run through the bootstrap with dependencies.
+$dic->call(function (
+    Container $dic,
+    Gdn_Configuration $config,
+    \Vanilla\AddonManager $addonManager,
+    \Garden\EventManager $eventManager,
+    Gdn_Request $request // remove later
+) {
+
+    // Load default baseline Garden configurations.
+    $config->load(PATH_CONF.'/config-defaults.php');
+
+    // Load installation-specific configuration so that we know what apps are enabled.
+    $config->load($config->defaultPath(), 'Configuration', true);
+
+    /**
+     * Bootstrap Early
+     *
+     * A lot of the framework is loaded now, most importantly the core autoloader,
+     * default config and the general and error functions. More control is possible
+     * here, but some things have already been loaded and are immutable.
+     */
+    if (file_exists(PATH_CONF.'/bootstrap.early.php')) {
+        require_once PATH_CONF.'/bootstrap.early.php';
+    }
+
+    $config->caching(true);
+    debug($config->get('Debug', false));
+
+    setHandlers();
+
+    /**
+     * Installer Redirect
+     *
+     * If Garden is not yet installed, force the request to /dashboard/setup and
+     * begin installation.
+     */
+    if ($config->get('Garden.Installed', false) === false && strpos($request->path(), 'setup') === false) {
+        safeHeader('Location: '.$request->url('dashboard/setup', true));
+        exit();
+    }
+
+    /**
+     * Extension Managers
+     *
+     * Now load the Addon, Application, Theme and Plugin managers into the Factory, and
+     * process the application-specific configuration defaults.
+     */
+
+    // Start the addons, plugins, and applications.
+    $addonManager->startAddonsByKey(c('EnabledPlugins'), Addon::TYPE_ADDON);
+    $addonManager->startAddonsByKey(c('EnabledApplications'), Addon::TYPE_ADDON);
+    $addonManager->startAddonsByKey(array_keys(c('EnabledLocales', [])), Addon::TYPE_LOCALE);
+
+    $currentTheme = c('Garden.Theme', Gdn_ThemeManager::DEFAULT_DESKTOP_THEME);
+    if (isMobile()) {
+        $currentTheme = c('Garden.MobileTheme', Gdn_ThemeManager::DEFAULT_MOBILE_THEME);
+    }
+    $addonManager->startAddonsByKey([$currentTheme], Addon::TYPE_THEME);
+
+    // Load the configurations for enabled addons.
+    foreach ($addonManager->getEnabled() as $addon) {
+        /* @var Addon $addon */
+        if ($configPath = $addon->getSpecial('config')) {
+            $config->load($addon->path($configPath));
+        }
+    }
+
+    // Re-apply loaded user settings.
+    $config->overlayDynamic();
+
+    /**
+     * Bootstrap Late
+     *
+     * All configurations are loaded, as well as the Application, Plugin and Theme
+     * managers.
+     */
+    if (file_exists(PATH_CONF.'/bootstrap.late.php')) {
+        require_once PATH_CONF.'/bootstrap.late.php';
+    }
+
+    if ($config->get('Debug')) {
+        debug(true);
+    }
+
+    Gdn_Cache::trace(debug()); // remove later
+
+    /**
+     * Extension Startup
+     *
+     * Allow installed addons to execute startup and bootstrap procedures that they may have, here.
+     */
+
+    // Bootstrapping.
+    foreach ($addonManager->getEnabled() as $addon) {
+        /* @var Addon $addon */
+        if ($bootstrapPath = $addon->getSpecial('bootstrap')) {
+            $bootstrapPath = $addon->path($bootstrapPath);
+            include_once $bootstrapPath;
+        }
+    }
+
+    // Plugins startup
+    $addonManager->bindAllEvents($eventManager);
+
+    if ($eventManager->hasHandler('gdn_pluginManager_afterStart')) {
+        $eventManager->fire('gdn_pluginManager_afterStart', $dic->get(Gdn_PluginManager::class));
+    }
+
+    // Now that all of the events have been bound, fire an event that allows plugins to modify the container.
+    $eventManager->fire('container_init', $dic);
+});
+
+// Send out cookie headers.
+register_shutdown_function(function () use ($dic) {
+    $dic->call(function(Garden\Web\Cookie $cookie) {
+        $cookie->flush();
+    });
+});
 
 /**
  * Locales
- * 
- * Install any custom locales provided by applications and plugins, and set up 
+ *
+ * Install any custom locales provided by applications and plugins, and set up
  * the locale management system.
  */
 
-// Load the Garden locale system
-$Gdn_Locale = new Gdn_Locale(C('Garden.Locale', 'en-CA'), Gdn::ApplicationManager()->EnabledApplicationFolders(), Gdn::PluginManager()->EnabledPluginFolders());
-Gdn::FactoryInstall(Gdn::AliasLocale, 'Gdn_Locale', NULL, Gdn::FactorySingleton, $Gdn_Locale);
-unset($Gdn_Locale);
+// Load the Garden locale system.
+$dic->get('Gdn_Locale');
 
-require_once(PATH_LIBRARY_CORE.'/functions.validation.php');
+require_once PATH_LIBRARY_CORE.'/functions.validation.php';
+
+// Configure JWT library to allow for five seconds of leeway.
+JWT::$leeway = 5;
 
 // Start Authenticators
-Gdn::Authenticator()->StartAuthenticator();
+$dic->get('Authenticator')->startAuthenticator();
 
 /**
  * Bootstrap After
- * 
+ *
  * After the bootstrap has finished loading, this hook allows developers a last
  * chance to customize Garden's runtime environment before the actual request
  * is handled.
  */
-if (file_exists(PATH_ROOT.'/conf/bootstrap.after.php'))
-   require_once(PATH_ROOT.'/conf/bootstrap.after.php');
-   
-// Include "Render" functions now - this way pluggables and custom confs can override them.
-require_once(PATH_LIBRARY_CORE.'/functions.render.php');
+if (file_exists(PATH_ROOT.'/conf/bootstrap.after.php')) {
+    require_once PATH_ROOT.'/conf/bootstrap.after.php';
+}
 
-if (!defined('CLIENT_NAME'))
-   define('CLIENT_NAME', 'vanilla');
+// Include "Render" functions now - this way pluggables and custom confs can override them.
+require_once PATH_LIBRARY_CORE.'/functions.render.php';
+
+if (!defined('CLIENT_NAME')) {
+    define('CLIENT_NAME', 'vanilla');
+}
+
+register_shutdown_function(function () use ($dic) {
+    // Trigger SchedulerDispatch event
+    $dic->get(\Garden\EventManager::class)->fire('SchedulerDispatch');
+});

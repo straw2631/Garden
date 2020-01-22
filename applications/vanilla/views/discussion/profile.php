@@ -1,10 +1,18 @@
 <?php if (!defined('APPLICATION')) exit();
-echo '<h2 class="H">'.T('Comments').'</h2>';
-if (sizeof($this->Data('Comments'))) {
-   echo '<ul class="DataList SearchResults">';
-   echo $this->FetchView('profilecomments', 'Discussion', 'Vanilla');
-   echo '</ul>';
-   echo $this->Pager->ToString('more');
+
+echo '<div class="DataListWrap">';
+echo '<h2 class="H">'.t('Comments').'</h2>';
+echo '<ul class="DataList Comments">';
+
+if (sizeof($this->data('Comments'))) {
+    echo $this->fetchView('profilecomments', 'Discussion', 'Vanilla');
+    echo $this->Pager->toString('more');
+} elseif ($this->data('UnfilteredCommentsCount', 0) > 0) {
+    echo '<li class="Item Empty">'.t('You do not have access to any comments on this page.').'</li>';
+    echo $this->Pager->toString('more');
 } else {
-   echo '<div class="Empty">'.T('This user has not commented yet.').'</div>';
+    echo '<li class="Item Empty">'.t('This user has not commented yet.').'</li>';
 }
+
+echo '</ul>';
+echo '</div>';

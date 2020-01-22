@@ -1,264 +1,351 @@
-<?php if (!defined('APPLICATION')) exit();
-
+<?php
 /**
  * Application Manager
- * 
- * Manages available applications, enabling and disabling them.
  *
  * @author Mark O'Sullivan <mark@vanillaforums.com>
  * @author Tim Gunter <tim@vanillaforums.com>
- * @copyright 2003 Vanilla Forums, Inc
- * @license http://www.opensource.org/licenses/gpl-2.0.php GPL
- * @package Garden
+ * @copyright 2009-2019 Vanilla Forums Inc.
+ * @license GPL-2.0-only
+ * @package Core
  * @since 2.0
  */
+use Vanilla\Addon;
+use Vanilla\AddonManager;
 
+/**
+ * Manages available applications, enabling and disabling them.
+ *
+ * @deprecated 3.0 Use Vanilla\AddonManager.
+ */
 class Gdn_ApplicationManager {
-   
-   /**
-    * An array of available applications. Never access this directly, instead
-    * use $this->AvailableApplications();
-    *
-    * @var array
-    */
-   private $_AvailableApplications = NULL;
 
-   /**
-    * An array of enabled applications. Never access this directly, instead
-    * use $this->EnabledApplications();
-    *
-    * @var array
-    */
-   private $_EnabledApplications = NULL;
-   
-   /**
-    * The valid paths to search for applications.
-    *
-    * @var array
-    */
-   public $Paths = array(PATH_APPLICATIONS);
+    /** @var array Available applications. Never access this directly, instead use $this->availableApplications(); */
+    private $availableApplications = null;
 
-   /**
-    * Looks through the root Garden directory for valid applications and
-    * returns them as an associative array of "Application Name" =>
-    * "Application Info Array". It also adds a "Folder" definition to the
-    * Application Info Array for each application.
-    */
-   public function AvailableApplications() {
-      if (!is_array($this->_AvailableApplications)) {
-         $ApplicationInfo = array();
-         
-         $AppFolders = Gdn_FileSystem::Folders(PATH_APPLICATIONS); // Get an array of all application folders
-         $ApplicationAboutFiles = Gdn_FileSystem::FindAll(PATH_APPLICATIONS, 'settings' . DS . 'about.php', $AppFolders); // Now look for about files within them.
-         // Include them all right here and fill the application info array
-         $ApplicationCount = count($ApplicationAboutFiles);
-         for ($i = 0; $i < $ApplicationCount; ++$i) {
-            include($ApplicationAboutFiles[$i]);
+    /** @var array Enabled applications. Never access this directly, instead use $this->enabledApplications(); */
+    private $enabledApplications = null;
 
-            // Define the folder name for the newly added item
-            foreach ($ApplicationInfo as $ApplicationName => $Info) {
-               if (array_key_exists('Folder', $ApplicationInfo[$ApplicationName]) === FALSE) {
-                  $Folder = substr($ApplicationAboutFiles[$i], strlen(PATH_APPLICATIONS));
-                  if (substr($Folder, 0, 1) == DS)
-                     $Folder = substr($Folder, 1);
+    /** @var array The valid paths to search for applications. */
+    public $Paths = [PATH_APPLICATIONS];
 
-                  $Folder = substr($Folder, 0, strpos($Folder, DS));
-                  $ApplicationInfo[$ApplicationName]['Folder'] = $Folder;
-               }
+    /**
+     * @var AddonManager
+     */
+    private $addonManager;
+
+    /**
+     *
+     */
+    public function __construct(AddonManager $addonManager = null) {
+        $this->addonManager = $addonManager;
+    }
+
+    /**
+     * Get a list of the available applications.
+     *
+     * Looks through the root Garden directory for valid applications and
+     * returns them as an associative array of "Application Name" =>
+     * "Application Info Array". It also adds a "Folder" definition to the
+     * Application Info Array for each application.
+     */
+    public function availableApplications() {
+        if (!is_array($this->availableApplications)) {
+            $applications = [];
+            $addons = $this->addonManager->lookupAllByType(Addon::TYPE_ADDON);
+
+            foreach ($addons as $addon) {
+                /* @var Addon $addon */
+                if ($addon->getInfoValue('oldType') !== 'application') {
+                    continue;
+                }
+
+                $info = $this->calcOldInfoArray($addon);
+                $applications[$info['Index']] = $info;
             }
-         }
-         // Add all of the indexes to the applications.
-         foreach ($ApplicationInfo as $Index => &$Info) {
-            $Info['Index'] = $Index;
-         }
 
-         $this->_AvailableApplications = $ApplicationInfo;
-      }
+            $this->availableApplications = $applications;
+        }
 
-      return $this->_AvailableApplications;
-   }
+        return $this->availableApplications;
+    }
 
-   /**
-    * Gets an array of all of the enabled applications.
-    * @return array
-    */
-   public function EnabledApplications() {
-      if (!is_array($this->_EnabledApplications)) {
-         $EnabledApplications = Gdn::Config('EnabledApplications', array('Dashboard' => 'dashboard'));
-         // Add some information about the applications to the array.
-         foreach($EnabledApplications as $Name => $Folder) {
-            $EnabledApplications[$Name] = array('Folder' => $Folder);
-            //$EnabledApplications[$Name]['Version'] = Gdn::Config($Name.'.Version', '');
-            $EnabledApplications[$Name]['Version'] = '';
-            $EnabledApplications[$Name]['Index'] = $Name;
-            // Get the application version from it's about file.
-            $AboutPath = PATH_APPLICATIONS.'/'.strtolower($Name).'/settings/about.php';
-            if (file_exists($AboutPath)) {
-               $ApplicationInfo = array();
-               include $AboutPath;
-               $EnabledApplications[$Name]['Version'] = GetValueR("$Name.Version", $ApplicationInfo, '');
+    /**
+     * Gets an array of all of the enabled applications.
+     *
+     * @return array
+     */
+    public function enabledApplications() {
+        if (!is_array($this->enabledApplications)) {
+            $applications = [];
+            $addons = $this->addonManager->getEnabled();
+
+            foreach ($addons as $addon) {
+                /* @var Addon $addon */
+                if ($addon->getInfoValue('oldType') !== 'application') {
+                    continue;
+                }
+
+                $info = $this->calcOldInfoArray($addon);
+                $applications[$info['Index']] = $info;
             }
-         }
-         $this->_EnabledApplications = $EnabledApplications;
-      }
 
-      return $this->_EnabledApplications;
-   }
-   
-   public function CheckApplication($ApplicationName) {
-      if (array_key_exists($ApplicationName, $this->EnabledApplications()))
-         return TRUE;
-         
-      return FALSE;
-   }
-   
-   public function GetApplicationInfo($ApplicationName, $Target = NULL) {
-      $ApplicationInfo = GetValue($ApplicationName, $this->AvailableApplications(), NULL);
-      if (is_null($ApplicationInfo)) return FALSE;
-      
-      if (!is_null($Target))
-         return GetValueR($Target, $ApplicationInfo, FALSE);
-      return $ApplicationInfo;
-   }
-   
-   public function AvailableVisibleApplications() {
-      $AvailableApplications = $this->AvailableApplications();
-      foreach ($AvailableApplications as $ApplicationName => $Info) {
-         if (!ArrayValue('AllowEnable', $Info, TRUE) || !ArrayValue('AllowDisable', $Info, TRUE))
-            unset($AvailableApplications[$ApplicationName]);
-      }
-      return $AvailableApplications;
-   }
+            $this->enabledApplications = $applications;
+        }
 
-   public function EnabledVisibleApplications() {
-      $AvailableApplications = $this->AvailableApplications();
-      $EnabledApplications = $this->EnabledApplications();
-      foreach ($AvailableApplications as $ApplicationName => $Info) {
-         if (array_key_exists($ApplicationName, $EnabledApplications)) {
-            if (!ArrayValue('AllowEnable', $Info, TRUE) || !ArrayValue('AllowDisable', $Info, TRUE)) {
-               unset($AvailableApplications[$ApplicationName]);
+        return $this->enabledApplications;
+    }
+
+    /**
+     * Calculate old application's info.
+     *
+     * @param Addon $addon
+     * @return array the old information.
+     */
+    private function calcOldInfoArray(Addon $addon) {
+        $info = Gdn_pluginManager::calcOldInfoArray($addon);
+        $directories = explode('/', $addon->getSubdir());
+        $info['Folder'] = $directories[count($directories) - 1];
+
+        return $info;
+    }
+
+    /**
+     * Check to see if an application is enabled.
+     *
+     * @param string $applicationName The name of the application to check.
+     * @return bool Returns true if the application is enabled, otherwise false.
+     */
+    public function checkApplication($applicationName) {
+        if (array_key_exists($applicationName, $this->enabledApplications())) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Get the information about an application.
+     *
+     * @param string $applicationName The name of the application to lookup.
+     * @param string $key The key of a field in the application info to return.
+     * @return bool|mixed Returns the application's info, a specific value, or false if the application cannot be found.
+     */
+    public function getApplicationInfo($applicationName, $key = null) {
+        $applicationInfo = val($applicationName, $this->availableApplications(), null);
+        if (is_null($applicationInfo)) {
+            return false;
+        }
+
+        if (!is_null($key)) {
+            return getValueR($key, $applicationInfo, false);
+        }
+
+        return $applicationInfo;
+    }
+
+    /**
+     * Get a list of applications that are not marked as invisible.
+     *
+     * @return array Returns an array of application info arrays.
+     */
+    public function availableVisibleApplications() {
+        $availableApplications = $this->availableApplications();
+        foreach ($availableApplications as $applicationName => $info) {
+            if (!val('AllowEnable', $info, true) || !val('AllowDisable', $info, true)) {
+                unset($availableApplications[$applicationName]);
             }
-         } else {
-            unset($AvailableApplications[$ApplicationName]);
-         }
-      }
-      return $AvailableApplications;
-   }
+        }
+        return $availableApplications;
+    }
 
-   /**
-    * @todo Undocumented method.
-    */
-   public function EnabledApplicationFolders() {
-      $EnabledApplications = C('EnabledApplications', array());
-      $EnabledApplications['Dashboard'] = 'dashboard';
-      return array_values($EnabledApplications);
-   }
+    /**
+     * Get a list of applications that are enabled and not marked as invisible.
+     *
+     * @return array Returns an array of application info arrays.
+     */
+    public function enabledVisibleApplications() {
+        $availableApplications = $this->availableApplications();
+        $enabledApplications = $this->enabledApplications();
+        foreach ($availableApplications as $applicationName => $info) {
+            if (array_key_exists($applicationName, $enabledApplications)) {
+                if (!val('AllowEnable', $info, true) || !val('AllowDisable', $info, true)) {
+                    unset($availableApplications[$applicationName]);
+                }
+            } else {
+                unset($availableApplications[$applicationName]);
+            }
+        }
+        return $availableApplications;
+    }
 
-   /**
-    * Undocumented method.
-    *
-    * @param string $ApplicationName Undocumented variable.
-    * @todo Document CheckRequirements() method.
-    */
-   public function CheckRequirements($ApplicationName) {
-      $AvailableApplications = $this->AvailableApplications();
-      $RequiredApplications = ArrayValue('RequiredApplications', ArrayValue($ApplicationName, $AvailableApplications, array()), FALSE);
-      $EnabledApplications = $this->EnabledApplications();
-      CheckRequirements($ApplicationName, $RequiredApplications, $EnabledApplications, 'application');
-   }
+    /**
+     * Get an list of enabled application folders.
+     *
+     * @return array Returns an array of all of the enabled application folders.
+     * @deprecated
+     */
+    public function enabledApplicationFolders() {
+        deprecated('Gdn_ApplicationManager->enabledApplicationFolders()');
 
-   /**
-    * Undocumented method.
-    *
-    * @param string $ApplicationName Undocumented variable.
-    * @param string $Validation Undocumented variable.
-    * @todo Document EnableApplication() method.
-    */
-   public function EnableApplication($ApplicationName, $Validation) {
-      $this->TestApplication($ApplicationName, $Validation);
-      $ApplicationInfo = ArrayValueI($ApplicationName, $this->AvailableApplications(), array());
-      $ApplicationName = $ApplicationInfo['Index'];
-      $ApplicationFolder = ArrayValue('Folder', $ApplicationInfo, '');
+        $addons = $this->addonManager->getEnabled();
+        $applications = array_filter($addons, Addon::makeFilterCallback(['oldType' => 'application']));
 
-      SaveToConfig('EnabledApplications'.'.'.$ApplicationName, $ApplicationFolder);
-      return TRUE;
-   }
+        $result = ['dashboard'];
+        /* @var Addon $application */
+        foreach ($applications as $application) {
+            $result[] = $application->getKey();
+        }
+        return array_unique($result);
+    }
 
-   public function TestApplication($ApplicationName, &$Validation) {
-      // Add the application to the $EnabledApplications array in conf/applications.php
-      $ApplicationInfo = ArrayValueI($ApplicationName, $this->AvailableApplications(), array());
-      $ApplicationName = $ApplicationInfo['Index'];
-      $ApplicationFolder = ArrayValue('Folder', $ApplicationInfo, '');
-      if ($ApplicationFolder == '')
-         throw new Exception(T('The application folder was not properly defined.'));
-      
-      // Hook directly into the autoloader and force it to load the newly tested application
-      Gdn_Autoloader::AttachApplication($ApplicationFolder);
-      
-      // Redefine the locale manager's settings $Locale->Set($CurrentLocale, $EnabledApps, $EnabledPlugins, TRUE);
-      $Locale = Gdn::Locale();
-      $Locale->Set($Locale->Current(), $this->EnabledApplicationFolders(), Gdn::PluginManager()->EnabledPluginFolders(), TRUE);
-      
-      // Call the application's setup method
-      $Hooks = $ApplicationName.'Hooks';
-      if (!class_exists($Hooks)) {
-         $HooksFile = PATH_APPLICATIONS.DS.$ApplicationFolder.'/settings/class.hooks.php';
-         if (file_exists($HooksFile))
-            include($HooksFile);
-      }
-      if (class_exists($Hooks)) {
-         $Hooks = new $Hooks();
-         $Hooks->Setup();
-      }
-      
-      return TRUE;
-   }
+    /**
+     * Check that the requirements for an application have been enabled.
+     *
+     * @param string $applicationName The name of the application to check.
+     */
+    public function checkRequirements($applicationName) {
+        $availableApplications = $this->availableApplications();
+        $requiredApplications = val(
+            'RequiredApplications',
+            val($applicationName, $availableApplications, []),
+            false
+        );
+        $enabledApplications = $this->enabledApplications();
+        checkRequirements($applicationName, $requiredApplications, $enabledApplications, 'application');
+    }
 
-   /**
-    * Undocumented method.
-    *
-    * @param string $ApplicationName Undocumented variable.
-    * @todo Document DisableApplication() method.
-    */
-   public function DisableApplication($ApplicationName) {
-      // 1. Check to make sure that this application is allowed to be disabled
-      $ApplicationInfo = ArrayValueI($ApplicationName, $this->AvailableApplications(), array());
-      $ApplicationName = $ApplicationInfo['Index'];
-      if (!ArrayValue('AllowDisable', $ApplicationInfo, TRUE))
-         throw new Exception(sprintf(T('You cannot disable the %s application.'), $ApplicationName));
+    /**
+     * Enable an application.
+     *
+     * @param string $applicationName The name of the application to enable.
+     * @return bool Returns true if the application was enabled or false otherwise.
+     */
+    public function enableApplication($applicationName) {
+        $this->testApplication($applicationName);
+        $applicationInfo = arrayValueI($applicationName, $this->availableApplications(), []);
+        $applicationName = $applicationInfo['Index'];
+        $applicationFolder = val('Folder', $applicationInfo, '');
 
-      // 2. Check to make sure that no other enabled applications rely on this one
-      foreach ($this->EnabledApplications() as $CheckingName => $CheckingInfo) {
-         $RequiredApplications = ArrayValue('RequiredApplications', $CheckingInfo, FALSE);
-         if (is_array($RequiredApplications) && array_key_exists($ApplicationName, $RequiredApplications) === TRUE) {
-            throw new Exception(sprintf(T('You cannot disable the %1$s application because the %2$s application requires it in order to function.'), $ApplicationName, $CheckingName));
-         }
-      }
+        saveToConfig('EnabledApplications'.'.'.$applicationName, $applicationFolder);
+        Logger::event(
+            'addon_enabled',
+            Logger::NOTICE,
+            'The {addonName} application was enabled.',
+            ['addonName' => $applicationName]
+        );
 
-      // 2. Disable it
-      RemoveFromConfig("EnabledApplications.{$ApplicationName}");
+        $this->EventArguments['AddonName'] = $applicationName;
+        Gdn::pluginManager()->callEventHandlers($this, 'ApplicationManager', 'AddonEnabled');
 
-      // Clear the object caches.
-      Gdn_Autoloader::SmartFree(Gdn_Autoloader::CONTEXT_APPLICATION, $ApplicationInfo);
+        return true;
+    }
 
-      // Redefine the locale manager's settings $Locale->Set($CurrentLocale, $EnabledApps, $EnabledPlugins, TRUE);
-      $Locale = Gdn::Locale();
-      $Locale->Set($Locale->Current(), $this->EnabledApplicationFolders(), Gdn::PluginManager()->EnabledPluginFolders(), TRUE);
-   }
+    /**
+     * Test if an application can be enabled.
+     *
+     * @param string $applicationName The name of the application to test.
+     * @return bool Returns true if the application can be enabled or false otherwise.
+     * @throws Exception Throws an exception if the application is not in the correct format.
+     */
+    public function testApplication($applicationName) {
+        // Add the application to the $EnabledApplications array in conf/applications.php
+        $ApplicationInfo = arrayValueI($applicationName, $this->availableApplications(), []);
+        $applicationName = $ApplicationInfo['Index'];
+        $ApplicationFolder = val('Folder', $ApplicationInfo, '');
+        if ($ApplicationFolder == '') {
+            throw new Exception(t('The application folder was not properly defined.'));
+        }
 
-   /**
-    * Undocumented method.
-    *
-    * @param string $ApplicationName Undocumented variable.
-    * @param string $Validation Undocumented variable.
-    * @todo Document RegisterPermissions() method.
-    */
-   public function RegisterPermissions($ApplicationName, &$Validation) {
-      $ApplicationInfo = ArrayValue($ApplicationName, $this->AvailableApplications(), array());
-      $PermissionName = ArrayValue('RegisterPermissions', $ApplicationInfo, FALSE);
-      if ($PermissionName != FALSE) {
-         $PermissionModel = Gdn::PermissionModel();
-         $PermissionModel->Define($PermissionName);
-      }
-   }
+        // Hook directly into the autoloader and force it to load the newly tested application
+        $this->addonManager->startAddonsByKey([$applicationName], \Vanilla\Addon::TYPE_ADDON);
+
+        // Call the application's setup method
+        $hooks = $applicationName.'Hooks';
+        if (!class_exists($hooks)) {
+            $hooksPath = PATH_APPLICATIONS.DS.$ApplicationFolder.'/settings/class.hooks.php';
+            if (file_exists($hooksPath)) {
+                include_once $hooksPath;
+            }
+        }
+        if (class_exists($hooks)) {
+            /* @var Gdn_IPlugin $hooks The hooks object should be a plugin. */
+            $hooks = Gdn::getContainer()->get($hooks);
+
+            if (method_exists($hooks, 'setup')) {
+                $hooks->setup();
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Disable an application.
+     *
+     * @param string $applicationName The name of the application to disable.
+     * @throws \Exception Throws an exception if the application can't be disabled.
+     */
+    public function disableApplication($applicationName) {
+        $addon = $this->addonManager->lookupAddon($applicationName);
+        if (!$addon) {
+            throw notFoundException('Application');
+        }
+
+        $applicationName = $addon->getRawKey();
+
+        // 1. Check to make sure that this application is allowed to be disabled
+        if (!$addon->getInfoValue('allowDisable', true)) {
+            throw new Exception(sprintf(t('You cannot disable the %s application.'), $applicationName));
+        }
+
+        // 2. Check to make sure that no other enabled applications rely on this one.
+        try {
+            $this->addonManager->checkDependents($addon, true);
+        } catch (Exception $ex) {
+            throw new Gdn_UserException($ex->getMessage(), $ex->getCode());
+        }
+
+        // 2. Disable it
+        removeFromConfig("EnabledApplications.{$applicationName}");
+
+        Logger::event(
+            'addon_disabled',
+            Logger::NOTICE,
+            'The {addonName} application was disabled.',
+            ['addonName' => $applicationName]
+        );
+
+        // Clear the object caches.
+        $this->addonManager->stopAddonsByKey([$applicationName], \Vanilla\Addon::TYPE_ADDON);
+
+        /** @var \Garden\EventManager $eventManager */
+        $eventManager = Gdn::getContainer()->get(\Garden\EventManager::class);
+        $this->addonManager->unbindAddonEvents($addon, $eventManager);
+    }
+
+    /**
+     * Check whether or not an application is enabled.
+     *
+     * @param string $name The name of the application.
+     * @return bool Whether or not the application is enabled.
+     * @since 2.2
+     * @deprecated
+     */
+    public function isEnabled($name) {
+        deprecated('Gdn_ApplicationManager->isEnabled()', 'AddonManager->isEnabled()');
+        return $this->addonManager->isEnabled($name, Addon::TYPE_ADDON);
+    }
+
+    /**
+     * Define the permissions for an application.
+     *
+     * @param string $applicationName The name of the application.
+     */
+    public function registerPermissions($applicationName) {
+        $addon = $this->addonManager->lookupAddon($applicationName);
+
+        if ($permissions = $addon->getInfoValue('registerPermissions')) {
+            Gdn::permissionModel()->define($permissions);
+        }
+    }
 }

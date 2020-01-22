@@ -1,120 +1,111 @@
 <?php if (!defined('APPLICATION')) exit();
-include $this->FetchViewLocation('helper_functions');
-
-PagerModule::Write(array('Sender' => $this, 'Limit' => 10));
+include $this->fetchViewLocation('helper_functions');
 ?>
-<table id="Log" class="AltColumns">
-   <thead>
-      <tr>
-         <th class="CheckboxCell"><input id="SelectAll" type="checkbox" /></th>
-         <th class="Alt UsernameCell"><?php echo T('Operation By', 'By'); ?></th>
-         <th><?php echo T('Record Content', 'Content') ?></th>
-         <th class="DateCell"><?php echo T('Applied On', 'Date'); ?></th>
-      </tr>
-   </thead>
-   <tbody>
-      <?php
-      foreach ($this->Data('Log') as $Row):
-         $RecordLabel = GetValueR('Data.Type', $Row);
-         if (!$RecordLabel)
-            $RecordLabel = $Row['RecordType'];
-         $RecordLabel = Gdn_Form::LabelCode($RecordLabel);
-
-      ?>
-      <tr id="<?php echo "LogID_{$Row['LogID']}"; ?>">
-         <td class="CheckboxCell"><input type="checkbox" name="LogID[]" value="<?php echo $Row['LogID']; ?>" /></td>
-         <td class="UsernameCell"><?php 
-            echo UserAnchor($Row, '', 'Insert');
-
-            if (!empty($Row['OtherUserIDs'])) {
-               $OtherUserIDs = explode(',',$Row['OtherUserIDs']);
-               echo ' '.Plural(count($OtherUserIDs), 'and %s other', 'and %s others').' ';
-            };
-         ?></td>
-         <td>
+    <div class="table-wrap">
+        <table id="Log" class="table-data table-data-content js-tj">
+            <thead>
+            <tr>
+                <th class="column-checkbox" data-tj-ignore="true"><input id="SelectAll" type="checkbox"/></th>
+                <th class="content-cell column-full content-cell-responsive" data-tj-main="true"><?php echo t('Record Content', 'Content') ?></th>
+                <th class="UsernameCell column-lg username-cell-responsive"><?php echo $this->data('_flaggedByTitle', t('Flagged By', 'Flagged By')); ?></th>
+                <th class="options column-checkbox"></th>
+            </tr>
+            </thead>
+            <tbody>
             <?php
-               $Url = FALSE;
-               if (in_array($Row['Operation'], array('Edit', 'Moderate'))) {
-                  switch (strtolower($Row['RecordType'])) {
-                     case 'discussion':
-                        $Url = "/discussion/{$Row['RecordID']}/x/p1";
-                        break;
-                     case 'comment':
-                        $Url = "/discussion/comment/{$Row['RecordID']}#Comment_{$Row['RecordID']}";
-                  }
-               }
+            foreach ($this->data('Log') as $Row):
+                $RecordLabel = valr('Data.Type', $Row);
+                if (!$RecordLabel)
+                    $RecordLabel = $Row['RecordType'];
+                $RecordLabel = Gdn_Form::labelCode($RecordLabel);
+                $user = Gdn::userModel()->getID($Row['InsertUserID'] ?? 0);
+                $viewPersonalInfo = gdn::session()->checkPermission('Garden.PersonalInfo.View');
 
-               echo '<div"><span class="Expander">', $this->FormatContent($Row), '</span></div>';
-               
-               // Write the other record counts.
-               
-               echo OtherRecordsMeta($Row['Data']);
+                $userBlock = new MediaItemModule(val('Name', $user), userUrl($user));
+                $userBlock->setView('media-sm')
+                    ->setImage(userPhotoUrl($user))
+                    ->addMeta(Gdn_Format::dateFull($Row['DateInserted'], 'html'));
 
-               echo '<div class="Meta-Container">';
+                $Url = FALSE;
+                if (in_array($Row['Operation'], ['Edit', 'Moderate'])) {
+                    switch (strtolower($Row['RecordType'])) {
+                        case 'discussion':
+                            $Url = "/discussion/{$Row['RecordID']}/x/p1";
+                            break;
+                        case 'comment':
+                            $Url = "/discussion/comment/{$Row['RecordID']}#Comment_{$Row['RecordID']}";
+                    }
+                } elseif ($Row['Operation'] === 'Delete') {
+                    switch (strtolower($Row['RecordType'])) {
+                        case 'comment':
+                            $Url = "/discussion/{$Row['ParentRecordID']}/x/p1";
+                    }
+                }
 
-               echo '<span class="Tags">';
-               echo '<span class="Tag Tag-'.$Row['Operation'].'">'.T($Row['Operation']).'</span> ';
-               echo '<span class="Tag Tag-'.$RecordLabel.'">'.Anchor(T($RecordLabel), $Url).'</span> ';
-               
-               echo '</span>';
+                ?>
+                <tr id="<?php echo "LogID_{$Row['LogID']}"; ?>">
+                    <td class="column-checkbox"><input type="checkbox" name="LogID[]" value="<?php echo $Row['LogID']; ?>"/>
+                    </td>
+                    <td class="content-cell">
+                        <?php
+                        $recordUser = Gdn::userModel()->getID($Row['RecordUserID'], DATASET_TYPE_ARRAY);
+                        if ($Row['RecordName']) {
+                            $authorBlock = new MediaItemModule(val('Name', $recordUser), userUrl($recordUser));
+                            $authorBlock->setView('media-sm')
+                                ->setImage(userPhotoUrl($recordUser))
+                                ->addTitleMetaIf((bool)$recordUser['Banned'], wrap(t('Banned'), 'span', ['class' => 'text-danger']))
+                                ->addTitleMeta(plural($recordUser['CountDiscussions'] + $recordUser['CountComments'], '%s post', '%s posts'))
 
-               if ($Row['RecordIPAddress']) {
-                  echo ' <span class="Meta">',
-                     '<span class="Meta-Label">IP</span> ',
-                     IPAnchor($Row['RecordIPAddress'], 'Meta-Value'),
-                     '</span> ';
-               }
+                                ->addMeta(Gdn_Format::dateFull($Row['RecordDate'], 'html'))
+                                ->addMeta('<b>'.t($RecordLabel, htmlspecialchars($RecordLabel)).'</b>')
+                                ->addMetaIf(($viewPersonalInfo && val('RecordIPAddress', $Row)), iPAnchor($Row['RecordIPAddress']));
 
-               if ($Row['CountGroup'] > 1) {
-                  echo ' <span class="Meta">',
-                  '<span class="Meta-Label">'.T('Reported').'</span> ',
-                  Wrap(Plural($Row['CountGroup'], '%s time', '%s times'), 'span', 'Meta-Value'),
-                  '</span> ';
+                            echo $authorBlock;
+                        }
 
-//                  echo ' ', sprintf(T('%s times'), $Row['CountGroup']);
-               }
-               
-               $RecordUser = Gdn::UserModel()->GetID($Row['RecordUserID'], DATASET_TYPE_ARRAY);
+                        echo '<div class="post-content js-collapsable" data-className="userContent">', $this->formatContent($Row), '</div>';
 
-               if ($Row['RecordName']) {
-                  echo ' <span class="Meta">',
-                     '<span class="Meta-Label">'.sprintf('%s by', T($RecordLabel)).'</span> ',
-                     UserAnchor($Row, 'Meta-Value', 'Record');
-                  
-                  if ($RecordUser['Banned']) {
-                     echo ' <span class="Tag Tag-Ban">'.T('Banned').'</span>';
-                  }
-                  
-                  echo ' <span class="Count">'.Plural($RecordUser['CountDiscussions'] + $RecordUser['CountComments'], '%s post', '%s posts').'</span>';
-                  
-                  
-                  echo '</span> ';
-               }
+                        // Write the other record counts.
 
-               // Write custom meta information.
-               $CustomMeta = GetValueR('Data._Meta', $Row, FALSE);
-               if (is_array($CustomMeta)) {
-                  foreach ($CustomMeta as $Key => $Value) {
-                     echo ' <span class="Meta">',
-                        '<span class="Meta-Label">'.T($Key).'</span> ',
-                        Wrap(Gdn_Format::Html($Value), 'span', array('class' => 'Meta-Value')),
-                        '</span>';
+                        echo otherRecordsMeta($Row['Data']);
 
-                  }
-               }
-              
-               echo '</div>';
+                        echo '<div class="Meta-Container">';
+                        if ($Row['CountGroup'] > 1) {
+                            echo ' <span class="info">',
+                                '<span class="Meta-Label">'.t('Reported').'</span> ',
+                            wrap(plural($Row['CountGroup'], '%s time', '%s times'), 'span', 'Meta-Value'),
+                            '</span> ';
+                        }
+
+                        // Write custom meta information.
+                        $CustomMeta = valr('Data._Meta', $Row, false);
+                        if (is_array($CustomMeta)) {
+                            foreach ($CustomMeta as $Key => $Value) {
+                                echo ' <span class="Meta">',
+                                    '<span class="Meta-Label">'.t($Key).'</span> ',
+                                wrap(Gdn_Format::html($Value), 'span', ['class' => 'Meta-Value']),
+                                '</span>';
+                            }
+                        }
+                        echo '</div>';
+                        ?>
+                    </td>
+                    <td class="UsernameCell">
+                        <?php echo $userBlock; ?>
+                    </td>
+                    <td class="options column-checkbox">
+                        <?php
+                        if ($Url) {
+                            $attr = ['title' => t('View Post'), 'aria-label' => t('View Post'), 'class' => 'btn btn-icon btn-icon-sm'];
+                            echo anchor(dashboardSymbol('external-link', 'icon icon-text'), $Url, '', $attr);
+                        }
+                        ?>
+                    </td>
+                </tr>
+            <?php
+            endforeach;
             ?>
-            
-         </td>
-         <td class="DateCell"><?php
-            echo Gdn_Format::Date($Row['DateInserted'], 'html');
-         ?></td>
-      </tr>
-      <?php
-      endforeach;
-      ?>
-   </tbody>
-</table>
+            </tbody>
+        </table>
+    </div>
 <?php
-PagerModule::Write();
